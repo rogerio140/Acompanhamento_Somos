@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Relatórios - Somos Educação</title>
+    <!-- Fontes do Google -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- CSS Customizado -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <!-- Ícones -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="bg-animation">
+        <div class="orb"></div>
+        <div class="orb"></div>
+        <div class="orb"></div>
+    </div>
+
+    <div class="container">
+        <header class="header animate-in">
+            <div class="header__logo">
+                <div class="header__icon">
+                    <i class="fa-solid fa-graduation-cap" style="color: white;"></i>
+                </div>
+                <span class="header__brand">Consultoria Eng & Life</span>
+            </div>
+            <h1 class="header__title">Somos Educação</h1>
+            <p class="header__subtitle">Análise e Acompanhamento de Avaliações</p>
+        </header>
+
+        <form id="report-form" action="{{ url_for('gerar_relatorio') }}" method="POST">
+            
+            <div class="glass-card animate-in">
+                <h2 class="glass-card__title">
+                    <i class="fa-solid fa-map-location-dot icon"></i>
+                    Selecione o Município
+                </h2>
+                
+                <div class="radio-group">
+                    <div class="radio-card">
+                        <input type="radio" id="mun-vd" name="municipio" value="Viradouro" required>
+                        <label for="mun-vd" class="radio-card__label">
+                            <i class="fa-solid fa-city radio-card__icon" style="color: var(--accent-blue);"></i>
+                            <span class="radio-card__name">Viradouro</span>
+                            <span class="radio-card__desc">Base de dados VD</span>
+                        </label>
+                    </div>
+                    
+                    <div class="radio-card">
+                        <input type="radio" id="mun-rp" name="municipio" value="Rio Pardo" required>
+                        <label for="mun-rp" class="radio-card__label">
+                            <i class="fa-solid fa-tree-city radio-card__icon" style="color: var(--accent-teal);"></i>
+                            <span class="radio-card__name">Rio Pardo</span>
+                            <span class="radio-card__desc">Base de dados RP</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Painel de Status (AJAX) -->
+                <div id="segmentos-status" class="segmentos-status">
+                    <div class="segmentos-status__title">Disponibilidade de Dados</div>
+                    
+                    <div id="seg-infantil" class="segmento-item">
+                        <i class="fa-solid fa-children" style="color: var(--text-muted); width: 20px;"></i>
+                        <span>Educação Infantil</span>
+                        <span class="count"></span>
+                        <span class="badge"></span>
+                    </div>
+                    
+                    <div id="seg-fundamental" class="segmento-item">
+                        <i class="fa-solid fa-book-open" style="color: var(--text-muted); width: 20px;"></i>
+                        <span>Ensino Fundamental</span>
+                        <span class="count"></span>
+                        <span class="badge"></span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass-card animate-in">
+                <h2 class="glass-card__title">
+                    <i class="fa-solid fa-file-pdf icon"></i>
+                    Tipo de Relatório
+                </h2>
+                
+                <div class="radio-group">
+                    <div class="radio-card">
+                        <input type="radio" id="tipo-red" name="tipo_relatorio" value="reduzido" checked required>
+                        <label for="tipo-red" class="radio-card__label">
+                            <i class="fa-solid fa-file-lines radio-card__icon" style="color: var(--accent-coral);"></i>
+                            <span class="radio-card__name">Reduzido</span>
+                            <span class="radio-card__desc">Resumo executivo, escolas e tempos médios</span>
+                        </label>
+                    </div>
+                    
+                    <div class="radio-card">
+                        <input type="radio" id="tipo-comp" name="tipo_relatorio" value="completo" required>
+                        <label for="tipo-comp" class="radio-card__label">
+                            <i class="fa-solid fa-file-contract radio-card__icon" style="color: var(--accent-purple);"></i>
+                            <span class="radio-card__name">Completo</span>
+                            <span class="radio-card__desc">Inclui análise de outliers, horários e dedicação</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="animate-in">
+                <button type="submit" id="btn-submit" class="btn-submit" disabled>
+                    <span class="btn-text">Gerar Relatório Analítico</span>
+                    <i class="fa-solid fa-wand-magic-sparkles btn-icon"></i>
+                    <div class="spinner"></div>
+                </button>
+            </div>
+            
+        </form>
+
+        <footer class="footer animate-in">
+            <p class="footer__text">&copy; 2026 Somos Educação. Todos os direitos reservados.</p>
+        </footer>
+    </div>
+
+    <!-- Overlay de Progresso (Gerando PDF) -->
+    <div id="progress-overlay" class="progress-overlay">
+        <div class="progress-spinner"></div>
+        <div class="progress-text">Iniciando processo...</div>
+        
+        <div class="progress-steps">
+            <div class="progress-step"><span class="step-icon">○</span> Conectando ao banco de dados</div>
+            <div class="progress-step"><span class="step-icon">○</span> Coletando dados das avaliações</div>
+            <div class="progress-step"><span class="step-icon">○</span> Processando gráficos e PDF</div>
+            <div class="progress-step"><span class="step-icon">○</span> Preparando arquivo para download</div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
