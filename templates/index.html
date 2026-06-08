@@ -107,15 +107,251 @@
                 </div>
             </div>
 
-            <div class="animate-in">
+            <div class="button-group animate-in">
+                <button type="button" id="btn-view-dashboard" class="btn-view" disabled>
+                    <span class="btn-text">Visualizar Painel de Dados</span>
+                    <i class="fa-solid fa-chart-pie btn-icon"></i>
+                    <div class="spinner"></div>
+                </button>
+                
                 <button type="submit" id="btn-submit" class="btn-submit" disabled>
-                    <span class="btn-text">Gerar Relatório Analítico</span>
-                    <i class="fa-solid fa-wand-magic-sparkles btn-icon"></i>
+                    <span class="btn-text">Baixar Relatório PDF</span>
+                    <i class="fa-solid fa-file-pdf btn-icon"></i>
                     <div class="spinner"></div>
                 </button>
             </div>
             
         </form>
+
+        <!-- Painel de Dados Analíticos (Dashboard) -->
+        <div id="dashboard-container" class="dashboard-container">
+            <div class="glass-card animate-in">
+                <div class="dashboard-header">
+                    <h2 class="dashboard-title">
+                        <i class="fa-solid fa-chart-line icon" style="color: var(--accent-teal);"></i>
+                        Painel Analítico: <span id="dash-municipio">-</span>
+                    </h2>
+                    <div class="dashboard-actions">
+                        <button type="button" id="btn-pdf-dashboard" class="btn-secondary-pdf">
+                            <i class="fa-solid fa-file-pdf"></i> Baixar PDF
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- KPI Cards Grid -->
+                <div class="kpi-grid">
+                    <div class="kpi-card">
+                        <div class="kpi-card__icon"><i class="fa-solid fa-user-graduate"></i></div>
+                        <div class="kpi-card__content">
+                            <span class="kpi-card__label">Alunos Avaliados</span>
+                            <span class="kpi-card__value" id="kpi-alunos">-</span>
+                            <span class="kpi-card__sub" id="kpi-alunos-sub">-</span>
+                        </div>
+                    </div>
+                    
+                    <div class="kpi-card">
+                        <div class="kpi-card__icon"><i class="fa-solid fa-school"></i></div>
+                        <div class="kpi-card__content">
+                            <span class="kpi-card__label">Escolas Atendidas</span>
+                            <span class="kpi-card__value" id="kpi-escolas">-</span>
+                            <span class="kpi-card__sub" id="kpi-escolas-sub">Com avaliações</span>
+                        </div>
+                    </div>
+                    
+                    <div class="kpi-card">
+                        <div class="kpi-card__icon"><i class="fa-solid fa-chalkboard-user"></i></div>
+                        <div class="kpi-card__content">
+                            <span class="kpi-card__label">Avaliadores</span>
+                            <span class="kpi-card__value" id="kpi-professores">-</span>
+                            <span class="kpi-card__sub" id="kpi-professores-sub">Professores</span>
+                        </div>
+                    </div>
+                    
+                    <div class="kpi-card">
+                        <div class="kpi-card__icon"><i class="fa-solid fa-clock"></i></div>
+                        <div class="kpi-card__content">
+                            <span class="kpi-card__label">Tempo Médio</span>
+                            <span class="kpi-card__value" id="kpi-tempo">-</span>
+                            <span class="kpi-card__sub" id="kpi-tempo-sub">Por avaliação</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Tab Controls -->
+            <div class="tab-container animate-in">
+                <div class="tab-buttons">
+                    <button type="button" class="tab-btn active" data-tab="tab-geral">
+                        <i class="fa-solid fa-circle-info"></i> Geral
+                    </button>
+                    <button type="button" class="tab-btn" data-tab="tab-estagios">
+                        <i class="fa-solid fa-layer-group"></i> Estágios
+                    </button>
+                    <button type="button" class="tab-btn" data-tab="tab-horarios">
+                        <i class="fa-solid fa-clock"></i> Horários
+                    </button>
+                    <button type="button" class="tab-btn" data-tab="tab-professores">
+                        <i class="fa-solid fa-graduation-cap"></i> Professores & Dedicação
+                    </button>
+                </div>
+                
+                <!-- Tab Content: Geral -->
+                <div id="tab-geral" class="tab-content active">
+                    <div class="dashboard-grid">
+                        <div class="chart-card">
+                            <h3>Total de Alunos por Segmento</h3>
+                            <div class="chart-wrapper">
+                                <img id="img-alunos-segmento" src="" alt="Alunos por Segmento">
+                            </div>
+                        </div>
+                        <div class="chart-card">
+                            <h3>Tempo Médio de Avaliação</h3>
+                            <div class="chart-wrapper">
+                                <img id="img-tempo-medio" src="" alt="Tempo Médio por Segmento">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="chart-card large">
+                        <h3>Alunos Avaliados por Escola e Segmento</h3>
+                        <div class="chart-wrapper">
+                            <img id="img-escolas-avaliadas" src="" alt="Alunos por Escola">
+                        </div>
+                    </div>
+
+                    <div class="dashboard-grid">
+                        <div class="chart-card">
+                            <h3>Distribuição dos Tempos de Avaliação</h3>
+                            <div class="chart-wrapper">
+                                <img id="img-histograma-tempos" src="" alt="Histograma de Tempos">
+                            </div>
+                        </div>
+                        <div class="table-card">
+                            <h3>Escolas e Alunos Avaliados</h3>
+                            <div class="table-wrapper">
+                                <table class="dashboard-table" id="table-escolas">
+                                    <thead>
+                                        <tr>
+                                            <th>Escola</th>
+                                            <th>Infantil</th>
+                                            <th>Fundamental</th>
+                                            <th>Total</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <!-- Dinâmico -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Tab Content: Estágios -->
+                <div id="tab-estagios" class="tab-content">
+                    <div class="chart-card large" id="card-heatmap-infantil" style="display:none;">
+                        <h3>Mapa de Calor - Educação Infantil (Estágios por Escola)</h3>
+                        <div class="chart-wrapper">
+                            <img id="img-heatmap-estagios-infantil" src="" alt="Mapa de Calor Infantil">
+                        </div>
+                    </div>
+                    <div class="chart-card large" id="card-heatmap-fundamental" style="display:none;">
+                        <h3>Mapa de Calor - Ensino Fundamental (Estágios por Escola)</h3>
+                        <div class="chart-wrapper">
+                            <img id="img-heatmap-estagios-fundamental" src="" alt="Mapa de Calor Fundamental">
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Tab Content: Horários -->
+                <div id="tab-horarios" class="tab-content">
+                    <div class="chart-card large">
+                        <h3>Alunos Avaliados por Horário de Finalização</h3>
+                        <div class="chart-wrapper">
+                            <img id="img-horarios-alunos" src="" alt="Horários de Finalização">
+                        </div>
+                    </div>
+                    <div class="chart-card large">
+                        <h3>Alunos Avaliados por Horário e Dia da Semana</h3>
+                        <div class="chart-wrapper">
+                            <img id="img-heatmap-horarios" src="" alt="Mapa de Calor Horários">
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Tab Content: Professores -->
+                <div id="tab-professores" class="tab-content">
+                    <div class="dashboard-grid">
+                        <div class="chart-card" id="card-outliers-infantil" style="display:none;">
+                            <h3>Tempos Atípicos (Outliers) - Educação Infantil</h3>
+                            <div class="chart-wrapper">
+                                <img id="img-outliers-infantil" src="" alt="Outliers Infantil">
+                            </div>
+                        </div>
+                        <div class="chart-card" id="card-outliers-fundamental" style="display:none;">
+                            <h3>Tempos Atípicos (Outliers) - Ensino Fundamental</h3>
+                            <div class="chart-wrapper">
+                                <img id="img-outliers-fundamental" src="" alt="Outliers Fundamental">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="chart-card large">
+                        <h3>Tempo Total de Dedicação dos Professores (Top 15)</h3>
+                        <div class="chart-wrapper">
+                            <img id="img-professores-dedicacao" src="" alt="Dedicação Professores">
+                        </div>
+                    </div>
+                    <div class="chart-card large">
+                        <h3>Relação entre Tempo de Dedicação e Alunos Avaliados</h3>
+                        <div class="chart-wrapper">
+                            <img id="img-professores-dispersao" src="" alt="Dispersão Professores">
+                        </div>
+                    </div>
+                    
+                    <div class="table-card large">
+                        <h3>Detalhamento dos Professores (Top 50)</h3>
+                        <div class="table-wrapper">
+                            <table class="dashboard-table" id="table-professores">
+                                <thead>
+                                    <tr>
+                                        <th>Nome</th>
+                                        <th>Escola</th>
+                                        <th>Segmento</th>
+                                        <th>Alunos</th>
+                                        <th>Dedicação (h)</th>
+                                        <th>Média/Aluno (min)</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <!-- Dinâmico -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="table-card large" id="card-prof-outliers" style="display:none;">
+                        <h3 style="color: var(--accent-coral);">Professores com Alunos em Tempos Atípicos (Outliers)</h3>
+                        <div class="table-wrapper">
+                            <table class="dashboard-table" id="table-prof-outliers">
+                                <thead>
+                                    <tr>
+                                        <th>Professor</th>
+                                        <th>Escola</th>
+                                        <th>Aluno</th>
+                                        <th>Tempo (min)</th>
+                                        <th>Classificação</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <!-- Dinâmico -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <footer class="footer animate-in">
             <p class="footer__text">&copy; 2026 Somos Educação. Todos os direitos reservados.</p>
