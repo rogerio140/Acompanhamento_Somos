@@ -9,7 +9,12 @@ from datetime import datetime
 from io import BytesIO
 import traceback
 import sys
-
+import hashlib
+try:
+    import _hashlib
+    _hashlib.openssl_md5 = hashlib.md5
+except Exception:
+    pass
 # Configure stdout to handle emojis in Windows console
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8')
