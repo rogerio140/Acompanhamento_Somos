@@ -20,24 +20,8 @@ if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8')
 
 
-from report_logic import (
-    get_db_connection,
-    verificar_segmentos_disponiveis,
-    coletar_dados,
-    criar_pdf,
-    calcular_stats,
-    detectar_outliers,
-    criar_grafico_barras_alunos,
-    criar_grafico_barras_tempo,
-    criar_grafico_escolas_avaliadas,
-    criar_heatmap_escolas_estagios,
-    criar_histograma,
-    criar_grafico_horarios_alunos,
-    criar_heatmap_alunos,
-    criar_grafico_outliers,
-    criar_grafico_professores,
-    criar_grafico_dispersao_professores
-)
+from database import Database
+from report_logic import RelatorioGenerator, gerar_relatorio_completo
 
 app = Flask(__name__)
 
@@ -56,9 +40,13 @@ def verificar_segmentos():
         if not municipio or municipio not in ('Viradouro', 'Rio Pardo'):
             return jsonify({'error': 'Município inválido'}), 400
 
-        conn = get_db_connection(municipio)
+        db = Database(municipio=municipio)
+        conn = db.get_connection()
         cursor = conn.cursor()
-        segmentos, total_infantil, total_fundamental = verificar_segmentos_disponiveis(cursor)
+        
+        generator = RelatorioGenerator(db)
+        segmentos, total_infantil, total_fundamental = generator.verificar_segmentos_disponiveis(cursor)
+        
         cursor.close()
         conn.close()
 
@@ -85,10 +73,13 @@ def obter_dados():
 
         print(f"\n📊 [Dashboard] Carregando dados para {municipio}...")
 
+        db = Database(municipio=municipio)
+        generator = RelatorioGenerator(db)
+        
         # 1. Conectar e verificar segmentos
-        conn = get_db_connection(municipio)
+        conn = db.get_connection()
         cursor = conn.cursor()
-        segmentos_disponiveis, _, _ = verificar_segmentos_disponiveis(cursor)
+        segmentos_disponiveis, _, _ = generator.verificar_segmentos_disponiveis(cursor)
         cursor.close()
         conn.close()
 
@@ -96,7 +87,7 @@ def obter_dados():
             return jsonify({'error': 'Nenhum segmento com dados disponível para este município.'}), 404
 
         # 2. Coletar dados
-        dados = coletar_dados(municipio, segmentos_disponiveis)
+        dados = generator.coletar_dados()
 
         # 3. Converter buffers dos gráficos para Base64
         import base64
@@ -113,60 +104,60 @@ def obter_dados():
         graficos = {}
         
         # Gráficos Gerais
-        graficos['alunos_segmento'] = to_b64(criar_grafico_barras_alunos(
+        graficos['alunos_segmento'] = to_b64(generator.criar_grafico_barras_alunos(
             dados['infantil'], dados['fundamental']
         ))
-        graficos['tempo_medio'] = to_b64(criar_grafico_barras_tempo(
+        graficos['tempo_medio'] = to_b64(generator.criar_grafico_barras_tempo(
             dados['infantil'], dados['fundamental']
         ))
         
         escolas_inf = dados['infantil']['escolas'] if dados['infantil'] else {}
         escolas_fund = dados['fundamental']['escolas'] if dados['fundamental'] else {}
-        graficos['escolas_avaliadas'] = to_b64(criar_grafico_escolas_avaliadas(
+        graficos['escolas_avaliadas'] = to_b64(generator.criar_grafico_escolas_avaliadas(
             escolas_inf, escolas_fund
         ))
         
         tempos_inf = dados['infantil']['tempos'] if dados['infantil'] else []
         tempos_fund = dados['fundamental']['tempos'] if dados['fundamental'] else []
-        graficos['histograma_tempos'] = to_b64(criar_histograma(tempos_inf, tempos_fund))
+        graficos['histograma_tempos'] = to_b64(generator.criar_histograma(tempos_inf, tempos_fund))
         
         # Heatmaps de Estágios
         if dados['infantil'] and dados['infantil']['escolas']:
-            graficos['heatmap_estagios_infantil'] = to_b64(criar_heatmap_escolas_estagios(
+            graficos['heatmap_estagios_infantil'] = to_b64(generator.criar_heatmap_escolas_estagios(
                 dados['infantil']['escolas'], "Distribuição de Estágios por Escola - Educação Infantil"
             ))
         if dados['fundamental'] and dados['fundamental']['escolas']:
-            graficos['heatmap_estagios_fundamental'] = to_b64(criar_heatmap_escolas_estagios(
+            graficos['heatmap_estagios_fundamental'] = to_b64(generator.criar_heatmap_escolas_estagios(
                 dados['fundamental']['escolas'], "Distribuição de Estágios por Escola - Ensino Fundamental"
             ))
             
         # Horários
         if dados['horarios']:
-            graficos['horarios_alunos'] = to_b64(criar_grafico_horarios_alunos(
+            graficos['horarios_alunos'] = to_b64(generator.criar_grafico_horarios_alunos(
                 dados['horarios']['horas'], dados['horarios']['total_alunos']
             ))
-            graficos['heatmap_horarios'] = to_b64(criar_heatmap_alunos(
+            graficos['heatmap_horarios'] = to_b64(generator.criar_heatmap_alunos(
                 dados['horarios']['hora_dia']
             ))
             
         # Professores
         if dados['professores']['todos']:
-            graficos['professores_dedicacao'] = to_b64(criar_grafico_professores(
+            graficos['professores_dedicacao'] = to_b64(generator.criar_grafico_professores(
                 dados['professores']['todos']
             ))
-            graficos['professores_dispersao'] = to_b64(criar_grafico_dispersao_professores(
+            graficos['professores_dispersao'] = to_b64(generator.criar_grafico_dispersao_professores(
                 dados['professores']['todos']
             ))
             
         # Outliers
         if dados['infantil'] and dados['infantil']['tempos']:
-            outliers_inf = detectar_outliers(dados['infantil']['tempos'])
-            graficos['outliers_infantil'] = to_b64(criar_grafico_outliers(
+            outliers_inf = generator.detectar_outliers(dados['infantil']['tempos'])
+            graficos['outliers_infantil'] = to_b64(generator.criar_grafico_outliers(
                 dados['infantil']['tempos'], outliers_inf, "Análise de Outliers - Educação Infantil"
             ))
         if dados['fundamental'] and dados['fundamental']['tempos']:
-            outliers_fund = detectar_outliers(dados['fundamental']['tempos'])
-            graficos['outliers_fundamental'] = to_b64(criar_grafico_outliers(
+            outliers_fund = generator.detectar_outliers(dados['fundamental']['tempos'])
+            graficos['outliers_fundamental'] = to_b64(generator.criar_grafico_outliers(
                 dados['fundamental']['tempos'], outliers_fund, "Análise de Outliers - Ensino Fundamental"
             ))
 
@@ -186,8 +177,8 @@ def obter_dados():
         def serializar_segmento(seg_data):
             if not seg_data:
                 return None
-            stats = calcular_stats(seg_data['tempos'])
-            outliers = detectar_outliers(seg_data['tempos'])
+            stats = generator.calcular_stats(seg_data['tempos'])
+            outliers = generator.detectar_outliers(seg_data['tempos'])
             
             # Converter defaultdict para dict comum e garantir que as chaves sejam strings
             escolas_limpas = {}
@@ -266,9 +257,12 @@ def gerar_relatorio():
         print(f"{'='*60}")
 
         # 1. Conectar e verificar segmentos
-        conn = get_db_connection(municipio)
+        db = Database(municipio=municipio)
+        generator = RelatorioGenerator(db)
+        
+        conn = db.get_connection()
         cursor = conn.cursor()
-        segmentos_disponiveis, _, _ = verificar_segmentos_disponiveis(cursor)
+        segmentos_disponiveis, _, _ = generator.verificar_segmentos_disponiveis(cursor)
         cursor.close()
         conn.close()
 
@@ -277,11 +271,12 @@ def gerar_relatorio():
 
         # 2. Coletar dados
         print(f"\n📊 Coletando dados de {municipio}...")
-        dados = coletar_dados(municipio, segmentos_disponiveis)
+        dados = generator.coletar_dados()
+        dados['segmentos_disponiveis'] = segmentos_disponiveis
 
         # 3. Gerar PDF
         print(f"\n📄 Gerando relatório ({tipo_efetivo})...")
-        pdf_buffer = criar_pdf(dados, municipio, segmentos_disponiveis, tipo_efetivo, secoes)
+        pdf_buffer = gerar_relatorio_completo(db, municipio, tipo_efetivo, secoes)
 
         # 4. Preparar nome do arquivo
         nome_arquivo = f"relatorio_avaliacoes_{municipio.lower().replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
