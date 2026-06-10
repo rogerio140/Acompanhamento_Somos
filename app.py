@@ -242,15 +242,27 @@ def gerar_relatorio():
     try:
         municipio = request.form.get('municipio')
         tipo_relatorio = request.form.get('tipo_relatorio', 'completo')
+        secoes_json = request.form.get('secoes', '[]')
+        
+        import json
+        try:
+            secoes = json.loads(secoes_json)
+        except json.JSONDecodeError:
+            secoes = ['geral', 'estagios', 'horarios', 'professores']
 
         if not municipio or municipio not in ('Viradouro', 'Rio Pardo'):
             return jsonify({'error': 'Município inválido'}), 400
 
-        if tipo_relatorio not in ('reduzido', 'completo'):
-            return jsonify({'error': 'Tipo de relatório inválido'}), 400
+        # Determinar tipo efetivo para o PDF
+        todas_secoes = {'geral', 'estagios', 'horarios', 'professores'}
+        if set(secoes) >= todas_secoes or tipo_relatorio == 'completo':
+            tipo_efetivo = 'completo'
+        else:
+            tipo_efetivo = 'personalizado'
 
         print(f"\n{'='*60}")
-        print(f"Gerando relatório: {municipio} - {tipo_relatorio}")
+        print(f"Gerando relatório: {municipio} - {tipo_efetivo}")
+        print(f"Seções selecionadas: {secoes}")
         print(f"{'='*60}")
 
         # 1. Conectar e verificar segmentos
@@ -268,8 +280,8 @@ def gerar_relatorio():
         dados = coletar_dados(municipio, segmentos_disponiveis)
 
         # 3. Gerar PDF
-        print(f"\n📄 Gerando relatório {tipo_relatorio}...")
-        pdf_buffer = criar_pdf(dados, municipio, segmentos_disponiveis, tipo_relatorio)
+        print(f"\n📄 Gerando relatório ({tipo_efetivo})...")
+        pdf_buffer = criar_pdf(dados, municipio, segmentos_disponiveis, tipo_efetivo, secoes)
 
         # 4. Preparar nome do arquivo
         nome_arquivo = f"relatorio_avaliacoes_{municipio.lower().replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
@@ -290,6 +302,7 @@ def gerar_relatorio():
         print(f"\n❌ Erro ao gerar relatório: {e}")
         traceback.print_exc()
         return jsonify({'error': f'Erro ao gerar relatório: {str(e)}'}), 500
+
 
 
 if __name__ == '__main__':

@@ -5,98 +5,32 @@
 
 document.addEventListener('DOMContentLoaded', () => {
     const form = document.getElementById('report-form');
-    const btnSubmit = document.getElementById('btn-submit');
-    const btnViewDashboard = document.getElementById('btn-view-dashboard');
+    const btnGerarRelatorio = document.getElementById('btn-gerar-relatorio');
     const dashboardContainer = document.getElementById('dashboard-container');
     const mainContainer = document.querySelector('.container');
     const municipioRadios = document.querySelectorAll('input[name="municipio"]');
     const segmentosStatus = document.getElementById('segmentos-status');
     const progressOverlay = document.getElementById('progress-overlay');
 
-    // ---- Verificar segmentos ao selecionar município ----
+    // Modal elements
+    const modalOverlay = document.getElementById('report-modal-overlay');
+    const modalClose = document.getElementById('modal-close');
+    const optCompleto = document.getElementById('opt-completo');
+    const optPersonalizado = document.getElementById('opt-personalizado');
+    const sectionsPanel = document.getElementById('sections-panel');
+    const btnGenerateCustom = document.getElementById('btn-generate-custom');
+
+    // ---- Ao selecionar município: verificar segmentos + carregar dashboard ----
     municipioRadios.forEach(radio => {
         radio.addEventListener('change', async (e) => {
             const municipio = e.target.value;
+            
+            // 1. Verificar segmentos
             await verificarSegmentos(municipio);
+            
+            // 2. Carregar o dashboard automaticamente
+            await carregarDashboard(municipio);
         });
-    });
-
-    // ---- Form submission ----
-    form.addEventListener('submit', async (e) => {
-        e.preventDefault();
-
-        const municipio = form.querySelector('input[name="municipio"]:checked');
-        const tipo = form.querySelector('input[name="tipo_relatorio"]:checked');
-
-        if (!municipio) {
-            showToast('Selecione um município', 'error');
-            return;
-        }
-
-        if (!tipo) {
-            showToast('Selecione o tipo de relatório', 'error');
-            return;
-        }
-
-        // Start loading
-        btnSubmit.classList.add('loading');
-        btnSubmit.disabled = true;
-        showProgress();
-
-        try {
-            updateProgressStep(0);
-
-            const formData = new FormData(form);
-
-            // Use fetch to download the PDF
-            const response = await fetch('/gerar-relatorio', {
-                method: 'POST',
-                body: formData
-            });
-
-            updateProgressStep(1);
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'Erro desconhecido');
-            }
-
-            updateProgressStep(2);
-
-            // Get filename from Content-Disposition header
-            const disposition = response.headers.get('Content-Disposition');
-            let filename = 'relatorio.pdf';
-            if (disposition) {
-                const match = disposition.match(/filename\*?=(?:UTF-8''|"?)([^";]+)/i);
-                if (match) filename = decodeURIComponent(match[1]);
-            }
-
-            // Download the blob
-            const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            window.URL.revokeObjectURL(url);
-
-            updateProgressStep(3);
-
-            setTimeout(() => {
-                hideProgress();
-                showToast('Relatório gerado com sucesso! 🎉', 'success');
-            }, 600);
-
-        } catch (error) {
-            hideProgress();
-            showToast(error.message || 'Erro ao gerar relatório', 'error');
-            console.error('Erro:', error);
-        } finally {
-            btnSubmit.classList.remove('loading');
-            btnSubmit.disabled = false;
-        }
     });
 
     // ---- Verificar segmentos via AJAX ----
@@ -146,13 +80,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
             segmentosStatus.classList.add('visible');
 
-            // Habilita os botões se houver dados
+            // Habilita o botão de relatório se houver dados
             if (data.infantil || data.fundamental) {
-                btnSubmit.disabled = false;
-                btnViewDashboard.disabled = false;
+                btnGerarRelatorio.disabled = false;
             } else {
-                btnSubmit.disabled = true;
-                btnViewDashboard.disabled = true;
+                btnGerarRelatorio.disabled = true;
             }
 
         } catch (error) {
@@ -161,90 +93,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // ---- Progress Overlay ----
-    function showProgress() {
-        progressOverlay.classList.add('visible');
-        // Reset all steps
-        document.querySelectorAll('.progress-step').forEach(step => {
-            step.classList.remove('active', 'done');
-        });
-    }
-
-    function hideProgress() {
-        progressOverlay.classList.remove('visible');
-    }
-
-    const stepMessages = [
-        'Conectando ao banco de dados...',
-        'Coletando dados das avaliações...',
-        'Gerando gráficos e PDF...',
-        'Preparando download...'
-    ];
-
-    function updateProgressStep(index) {
-        const steps = document.querySelectorAll('.progress-step');
-        const progressText = document.querySelector('.progress-text');
-
-        steps.forEach((step, i) => {
-            if (i < index) {
-                step.classList.remove('active');
-                step.classList.add('done');
-                step.querySelector('.step-icon').textContent = '✓';
-            } else if (i === index) {
-                step.classList.add('active');
-                step.classList.remove('done');
-                step.querySelector('.step-icon').textContent = '⟳';
-            } else {
-                step.classList.remove('active', 'done');
-                step.querySelector('.step-icon').textContent = '○';
-            }
-        });
-
-        if (progressText && stepMessages[index]) {
-            progressText.textContent = stepMessages[index];
-        }
-    }
-
-    // ---- Toast Notifications ----
-    function showToast(message, type = 'info') {
-        // Remove existing toasts
-        document.querySelectorAll('.toast').forEach(t => t.remove());
-
-        const toast = document.createElement('div');
-        toast.className = `toast toast--${type}`;
-
-        const icons = { success: '✅', error: '❌', info: 'ℹ️' };
-        toast.innerHTML = `<span>${icons[type] || ''}</span> ${message}`;
-
-        document.body.appendChild(toast);
-
-        // Trigger animation
-        requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-                toast.classList.add('visible');
-            });
-        });
-
-        // Auto dismiss
-        setTimeout(() => {
-            toast.classList.remove('visible');
-            setTimeout(() => toast.remove(), 400);
-        }, 4000);
-    }
-
-    // ---- View Dashboard Event ----
-    btnViewDashboard.addEventListener('click', async () => {
-        const municipioInput = form.querySelector('input[name="municipio"]:checked');
-        if (!municipioInput) {
-            showToast('Selecione um município', 'error');
-            return;
-        }
-
-        const municipio = municipioInput.value;
-
-        // Start loading status
-        btnViewDashboard.classList.add('loading');
-        btnViewDashboard.disabled = true;
+    // ---- Carregar Dashboard automaticamente ----
+    async function carregarDashboard(municipio) {
         showProgress();
 
         try {
@@ -469,18 +319,223 @@ document.addEventListener('DOMContentLoaded', () => {
                 dashboardContainer.classList.add('visible');
                 
                 dashboardContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                showToast('Painel analítico carregado com sucesso! 📊', 'success');
+                showToast('Dados carregados com sucesso! 📊', 'success');
             }, 600);
 
         } catch (error) {
             hideProgress();
-            showToast(error.message || 'Erro ao carregar dados do dashboard', 'error');
+            showToast(error.message || 'Erro ao carregar dados', 'error');
             console.error('Erro no dashboard:', error);
-        } finally {
-            btnViewDashboard.classList.remove('loading');
-            btnViewDashboard.disabled = false;
+        }
+    }
+
+    // ---- Modal: Gerar Relatório ----
+    btnGerarRelatorio.addEventListener('click', () => {
+        // Reset modal state
+        sectionsPanel.classList.remove('visible');
+        optCompleto.classList.remove('selected');
+        optPersonalizado.classList.remove('selected');
+        
+        // Reset all checkboxes to checked
+        document.querySelectorAll('#sections-panel input[type="checkbox"]').forEach(cb => {
+            cb.checked = true;
+        });
+        
+        modalOverlay.classList.add('visible');
+    });
+
+    // Close modal
+    modalClose.addEventListener('click', () => {
+        modalOverlay.classList.remove('visible');
+    });
+
+    // Close modal clicking overlay background
+    modalOverlay.addEventListener('click', (e) => {
+        if (e.target === modalOverlay) {
+            modalOverlay.classList.remove('visible');
         }
     });
+
+    // Option: Completo → gerar imediatamente com todas as seções
+    optCompleto.addEventListener('click', async () => {
+        modalOverlay.classList.remove('visible');
+        await gerarRelatorio('completo', ['geral', 'estagios', 'horarios', 'professores']);
+    });
+
+    // Option: Personalizado → mostrar checkboxes
+    optPersonalizado.addEventListener('click', () => {
+        optCompleto.classList.remove('selected');
+        optPersonalizado.classList.add('selected');
+        sectionsPanel.classList.add('visible');
+    });
+
+    // Botão de gerar com seções personalizadas
+    btnGenerateCustom.addEventListener('click', async () => {
+        const checkedSections = Array.from(
+            document.querySelectorAll('#sections-panel input[name="secao"]:checked')
+        ).map(cb => cb.value);
+
+        if (checkedSections.length === 0) {
+            showToast('Selecione ao menos uma seção para o relatório', 'error');
+            return;
+        }
+
+        modalOverlay.classList.remove('visible');
+        await gerarRelatorio('personalizado', checkedSections);
+    });
+
+    // ---- Gerar Relatório PDF ----
+    async function gerarRelatorio(tipo, secoes) {
+        const municipioInput = form.querySelector('input[name="municipio"]:checked');
+        if (!municipioInput) {
+            showToast('Selecione um município', 'error');
+            return;
+        }
+
+        const municipio = municipioInput.value;
+
+        // Start loading
+        btnGerarRelatorio.classList.add('loading');
+        btnGerarRelatorio.disabled = true;
+        showProgress();
+
+        try {
+            updateProgressStep(0);
+
+            const formData = new FormData();
+            formData.append('municipio', municipio);
+            formData.append('tipo_relatorio', tipo);
+            formData.append('secoes', JSON.stringify(secoes));
+
+            // Use fetch to download the PDF
+            const response = await fetch('/gerar-relatorio', {
+                method: 'POST',
+                body: formData
+            });
+
+            updateProgressStep(1);
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Erro desconhecido');
+            }
+
+            updateProgressStep(2);
+
+            // Get filename from Content-Disposition header
+            const disposition = response.headers.get('Content-Disposition');
+            let filename = 'relatorio.pdf';
+            if (disposition) {
+                const match = disposition.match(/filename\*?=(?:UTF-8''|"?)([^";]+)/i);
+                if (match) filename = decodeURIComponent(match[1]);
+            }
+
+            // Download the blob
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.URL.revokeObjectURL(url);
+
+            updateProgressStep(3);
+
+            setTimeout(() => {
+                hideProgress();
+                showToast('Relatório gerado com sucesso! 🎉', 'success');
+            }, 600);
+
+        } catch (error) {
+            hideProgress();
+            showToast(error.message || 'Erro ao gerar relatório', 'error');
+            console.error('Erro:', error);
+        } finally {
+            btnGerarRelatorio.classList.remove('loading');
+            btnGerarRelatorio.disabled = false;
+        }
+    }
+
+    // ---- Dashboard PDF download convenience button ----
+    const btnPdfDashboard = document.getElementById('btn-pdf-dashboard');
+    if (btnPdfDashboard) {
+        btnPdfDashboard.addEventListener('click', () => {
+            btnGerarRelatorio.click();
+        });
+    }
+
+    // ---- Progress Overlay ----
+    function showProgress() {
+        progressOverlay.classList.add('visible');
+        // Reset all steps
+        document.querySelectorAll('.progress-step').forEach(step => {
+            step.classList.remove('active', 'done');
+        });
+    }
+
+    function hideProgress() {
+        progressOverlay.classList.remove('visible');
+    }
+
+    const stepMessages = [
+        'Conectando ao banco de dados...',
+        'Coletando dados das avaliações...',
+        'Gerando gráficos e PDF...',
+        'Preparando download...'
+    ];
+
+    function updateProgressStep(index) {
+        const steps = document.querySelectorAll('.progress-step');
+        const progressText = document.querySelector('.progress-text');
+
+        steps.forEach((step, i) => {
+            if (i < index) {
+                step.classList.remove('active');
+                step.classList.add('done');
+                step.querySelector('.step-icon').textContent = '✓';
+            } else if (i === index) {
+                step.classList.add('active');
+                step.classList.remove('done');
+                step.querySelector('.step-icon').textContent = '⟳';
+            } else {
+                step.classList.remove('active', 'done');
+                step.querySelector('.step-icon').textContent = '○';
+            }
+        });
+
+        if (progressText && stepMessages[index]) {
+            progressText.textContent = stepMessages[index];
+        }
+    }
+
+    // ---- Toast Notifications ----
+    function showToast(message, type = 'info') {
+        // Remove existing toasts
+        document.querySelectorAll('.toast').forEach(t => t.remove());
+
+        const toast = document.createElement('div');
+        toast.className = `toast toast--${type}`;
+
+        const icons = { success: '✅', error: '❌', info: 'ℹ️' };
+        toast.innerHTML = `<span>${icons[type] || ''}</span> ${message}`;
+
+        document.body.appendChild(toast);
+
+        // Trigger animation
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                toast.classList.add('visible');
+            });
+        });
+
+        // Auto dismiss
+        setTimeout(() => {
+            toast.classList.remove('visible');
+            setTimeout(() => toast.remove(), 400);
+        }, 4000);
+    }
 
     // ---- Tab Switcher ----
     const tabButtons = document.querySelectorAll('.tab-btn');
@@ -500,12 +555,4 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     });
-
-    // ---- Dashboard PDF download convenience button ----
-    const btnPdfDashboard = document.getElementById('btn-pdf-dashboard');
-    if (btnPdfDashboard) {
-        btnPdfDashboard.addEventListener('click', () => {
-            form.requestSubmit();
-        });
-    }
 });

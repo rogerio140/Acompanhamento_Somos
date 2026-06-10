@@ -80,42 +80,9 @@
                 </div>
             </div>
 
-            <div class="glass-card animate-in">
-                <h2 class="glass-card__title">
-                    <i class="fa-solid fa-file-pdf icon"></i>
-                    Tipo de Relatório
-                </h2>
-                
-                <div class="radio-group">
-                    <div class="radio-card">
-                        <input type="radio" id="tipo-red" name="tipo_relatorio" value="reduzido" checked required>
-                        <label for="tipo-red" class="radio-card__label">
-                            <i class="fa-solid fa-file-lines radio-card__icon" style="color: var(--accent-coral);"></i>
-                            <span class="radio-card__name">Reduzido</span>
-                            <span class="radio-card__desc">Resumo executivo, escolas e tempos médios</span>
-                        </label>
-                    </div>
-                    
-                    <div class="radio-card">
-                        <input type="radio" id="tipo-comp" name="tipo_relatorio" value="completo" required>
-                        <label for="tipo-comp" class="radio-card__label">
-                            <i class="fa-solid fa-file-contract radio-card__icon" style="color: var(--accent-purple);"></i>
-                            <span class="radio-card__name">Completo</span>
-                            <span class="radio-card__desc">Inclui análise de outliers, horários e dedicação</span>
-                        </label>
-                    </div>
-                </div>
-            </div>
-
-            <div class="button-group animate-in">
-                <button type="button" id="btn-view-dashboard" class="btn-view" disabled>
-                    <span class="btn-text">Visualizar Painel de Dados</span>
-                    <i class="fa-solid fa-chart-pie btn-icon"></i>
-                    <div class="spinner"></div>
-                </button>
-                
-                <button type="submit" id="btn-submit" class="btn-submit" disabled>
-                    <span class="btn-text">Baixar Relatório PDF</span>
+            <div class="button-group animate-in" style="grid-template-columns: 1fr;">
+                <button type="button" id="btn-gerar-relatorio" class="btn-submit" disabled>
+                    <span class="btn-text">Gerar Relatório PDF</span>
                     <i class="fa-solid fa-file-pdf btn-icon"></i>
                     <div class="spinner"></div>
                 </button>
@@ -359,6 +326,96 @@
     </div>
 
     <!-- Overlay de Progresso (Gerando PDF) -->
+    <!-- Modal de Configuração do Relatório -->
+    <div id="report-modal-overlay" class="modal-overlay">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3 class="modal-title">
+                    <i class="fa-solid fa-file-pdf" style="color: var(--accent-coral);"></i>
+                    Configurar Relatório PDF
+                </h3>
+                <button type="button" id="modal-close" class="modal-close">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            
+            <div class="modal-body">
+                <p class="modal-desc">Escolha como deseja gerar o relatório:</p>
+                
+                <div class="modal-options">
+                    <div class="modal-option-card" id="opt-completo">
+                        <div class="modal-option-icon">
+                            <i class="fa-solid fa-file-contract" style="color: var(--accent-purple);"></i>
+                        </div>
+                        <div class="modal-option-info">
+                            <span class="modal-option-name">Relatório Completo</span>
+                            <span class="modal-option-desc">Inclui todas as seções de análise</span>
+                        </div>
+                        <i class="fa-solid fa-chevron-right modal-option-arrow"></i>
+                    </div>
+                    
+                    <div class="modal-option-card" id="opt-personalizado">
+                        <div class="modal-option-icon">
+                            <i class="fa-solid fa-sliders" style="color: var(--accent-teal);"></i>
+                        </div>
+                        <div class="modal-option-info">
+                            <span class="modal-option-name">Personalizar Seções</span>
+                            <span class="modal-option-desc">Escolha quais grupos de informações incluir</span>
+                        </div>
+                        <i class="fa-solid fa-chevron-right modal-option-arrow"></i>
+                    </div>
+                </div>
+                
+                <!-- Painel de seleção de seções (oculto inicialmente) -->
+                <div id="sections-panel" class="sections-panel">
+                    <p class="sections-label">Selecione as seções do relatório:</p>
+                    
+                    <label class="section-check">
+                        <input type="checkbox" name="secao" value="geral" checked>
+                        <span class="section-check__box"><i class="fa-solid fa-check"></i></span>
+                        <span class="section-check__info">
+                            <span class="section-check__name"><i class="fa-solid fa-circle-info"></i> Geral</span>
+                            <span class="section-check__desc">Resumo executivo, alunos por segmento, escolas, tempos médios e distribuição</span>
+                        </span>
+                    </label>
+                    
+                    <label class="section-check">
+                        <input type="checkbox" name="secao" value="estagios" checked>
+                        <span class="section-check__box"><i class="fa-solid fa-check"></i></span>
+                        <span class="section-check__info">
+                            <span class="section-check__name"><i class="fa-solid fa-layer-group"></i> Estágios</span>
+                            <span class="section-check__desc">Mapa de calor de estágios de desenvolvimento por escola</span>
+                        </span>
+                    </label>
+                    
+                    <label class="section-check">
+                        <input type="checkbox" name="secao" value="horarios" checked>
+                        <span class="section-check__box"><i class="fa-solid fa-check"></i></span>
+                        <span class="section-check__info">
+                            <span class="section-check__name"><i class="fa-solid fa-clock"></i> Horários</span>
+                            <span class="section-check__desc">Análise de horários e dias de finalização das avaliações</span>
+                        </span>
+                    </label>
+                    
+                    <label class="section-check">
+                        <input type="checkbox" name="secao" value="professores" checked>
+                        <span class="section-check__box"><i class="fa-solid fa-check"></i></span>
+                        <span class="section-check__info">
+                            <span class="section-check__name"><i class="fa-solid fa-graduation-cap"></i> Professores & Dedicação</span>
+                            <span class="section-check__desc">Outliers, tempo de dedicação e detalhamento por professor</span>
+                        </span>
+                    </label>
+                    
+                    <button type="button" id="btn-generate-custom" class="btn-submit" style="margin-top: 20px;">
+                        <span class="btn-text">Gerar Relatório</span>
+                        <i class="fa-solid fa-download btn-icon"></i>
+                        <div class="spinner"></div>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div id="progress-overlay" class="progress-overlay">
         <div class="progress-spinner"></div>
         <div class="progress-text">Iniciando processo...</div>
