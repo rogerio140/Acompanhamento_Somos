@@ -3,4 +3,28 @@ psycopg2-binary
 numpy
 matplotlib
 reportlab
-gunicorn
+gunicorn# Core Framework
+Flask>=2.3.0
+Flask-Session>=0.5.0
+
+# Database
+psycopg2-binary>=2.9.0
+psycopg>=3.1.0
+
+# Scientific Computing & Statistics
+numpy>=1.24.0
+scipy>=1.10.0
+pandas>=2.0.0
+
+# Visualization
+matplotlib>=3.7.0
+
+# PDF Generation
+reportlab>=4.0.0
+
+# Timezone Handling
+pytz>=2023.0
+
+# Utilities
+python-dotenv>=1.0.0
+openpyxl>=3.1.0
