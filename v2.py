@@ -286,7 +286,6 @@ class RelatorioGenerator:
                 'dia_finalizacao': ultima.strftime('%A') if ultima else 'Unknown'
             })
             dados['escolas'][escola]['total_alunos'] += 1
-            dados['escolas'][escola]['tempo_total_minutos'] += tempo
         
         # Coletar estágios por escola
         cursor.execute(f"""
@@ -535,58 +534,6 @@ class RelatorioGenerator:
                 todos_professores[prof_id]['tempo_std_aluno'] = np.std(tempos) if len(tempos) > 1 else 0
         
         dados['professores']['todos'] = todos_professores
-        
-        # Obter o total de alunos matriculados por escola
-        try:
-            cursor.execute("""
-                SELECT e.nome as escola_nome, COUNT(a.matricula) as total_alunos
-                FROM alunos a
-                JOIN turmas t ON a.turma_id = t.id
-                JOIN escolas e ON t.escola_id = e.id
-                GROUP BY e.nome
-            """)
-            alunos_totais_escola = {row[0]: row[1] for row in cursor.fetchall()}
-        except Exception as e:
-            print(f"Erro ao buscar alunos totais por escola: {e}")
-            alunos_totais_escola = {}
-            
-        # Consolidar progresso e dedicação das escolas
-        escolas_progresso = {}
-        todas_escolas = set(alunos_totais_escola.keys())
-        if dados['infantil']:
-            todas_escolas.update(dados['infantil']['escolas'].keys())
-        if dados['fundamental']:
-            todas_escolas.update(dados['fundamental']['escolas'].keys())
-            
-        for escola in todas_escolas:
-            # Ignorar nome vazio ou genérico
-            if not escola or escola == 'Sem escola':
-                continue
-                
-            inf_eval = dados['infantil']['escolas'][escola]['total_alunos'] if (dados['infantil'] and escola in dados['infantil']['escolas']) else 0
-            fund_eval = dados['fundamental']['escolas'][escola]['total_alunos'] if (dados['fundamental'] and escola in dados['fundamental']['escolas']) else 0
-            inf_time = dados['infantil']['escolas'][escola].get('tempo_total_minutos', 0) if (dados['infantil'] and escola in dados['infantil']['escolas']) else 0
-            fund_time = dados['fundamental']['escolas'][escola].get('tempo_total_minutos', 0) if (dados['fundamental'] and escola in dados['fundamental']['escolas']) else 0
-            
-            avaliados = inf_eval + fund_eval
-            tempo_total_horas = (inf_time + fund_time) / 60
-            totais = alunos_totais_escola.get(escola, 0)
-            
-            # Se o total for menor que os avaliados (inconsistência na DB), ajustamos
-            if totais < avaliados:
-                totais = avaliados
-                
-            progresso_pct = (avaliados / totais * 100) if totais > 0 else 0
-            
-            escolas_progresso[escola] = {
-                'nome': escola,
-                'alunos_totais': totais,
-                'alunos_avaliados': avaliados,
-                'progresso': round(progresso_pct, 1),
-                'tempo_total_horas': round(tempo_total_horas, 2)
-            }
-            
-        dados['escolas_progresso'] = escolas_progresso
         
         cursor.close()
         conn.close()
@@ -1143,43 +1090,6 @@ class RelatorioGenerator:
     
     # ========== MÉTODO PRINCIPAL DE GERAÇÃO DE PDF ==========
     
-    def desenhar_barra_progresso_pdf(self, porcentagem):
-        """Cria uma pequena tabela que serve como barra de progresso visual no PDF"""
-        largura_total = 100  # em pontos
-        largura_preenchida = max(0, min(100, int(porcentagem)))
-        largura_vazia = 100 - largura_preenchida
-        
-        cor_barra = colors.HexColor('#4ECDC4')  # Teal para progresso
-        if porcentagem >= 100:
-            cor_barra = colors.HexColor('#2ecc71')  # Verde para 100%
-            
-        if largura_vazia <= 0:
-            t = Table([['']], colWidths=[100], rowHeights=[8])
-            t.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (0, 0), cor_barra),
-                ('PADDING', (0, 0), (-1, -1), 0),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
-                ('TOPPADDING', (0, 0), (-1, -1), 0),
-            ]))
-        elif largura_preenchida <= 0:
-            t = Table([['']], colWidths=[100], rowHeights=[8])
-            t.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (0, 0), colors.HexColor('#E0E0E0')),
-                ('PADDING', (0, 0), (-1, -1), 0),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
-                ('TOPPADDING', (0, 0), (-1, -1), 0),
-            ]))
-        else:
-            t = Table([['', '']], colWidths=[largura_preenchida, largura_vazia], rowHeights=[8])
-            t.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (0, 0), cor_barra),
-                ('BACKGROUND', (1, 0), (1, 0), colors.HexColor('#E0E0E0')),
-                ('PADDING', (0, 0), (-1, -1), 0),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
-                ('TOPPADDING', (0, 0), (-1, -1), 0),
-            ]))
-        return t
-
     def criar_pdf(self, dados, municipio, tipo_relatorio='completo', secoes=None):
         """Cria o PDF do relatório"""
         buffer = BytesIO()
@@ -1359,51 +1269,13 @@ class RelatorioGenerator:
                 story.append(imagem)
                 story.append(Spacer(1, 10))
             
-            # Ranking de Conclusão e Dedicação por Escola
-            escolas_progresso = dados.get('escolas_progresso', {})
-            if escolas_progresso:
-                story.append(Paragraph("<b>Ranking de Conclusão e Dedicação por Escola:</b>", estilo_normal))
-                story.append(Spacer(1, 5))
-                
-                # Cabeçalho da tabela
-                ranking_data = [
-                    [
-                        Paragraph('Pos', estilo_celula_header),
-                        Paragraph('Escola', estilo_celula_header),
-                        Paragraph('Progresso', estilo_celula_header),
-                        Paragraph('Avaliações / Total', estilo_celula_header),
-                        Paragraph('Dedicação Total', estilo_celula_header)
-                    ]
-                ]
-                
-                # Ordenar escolas por progresso (decrescente), depois por tempo total (decrescente), depois por nome (crescente)
-                escolas_ordenadas = sorted(
-                    escolas_progresso.values(),
-                    key=lambda x: (-x['progresso'], -x['tempo_total_horas'], x['nome'])
-                )
-                
-                for idx, esc in enumerate(escolas_ordenadas, 1):
-                    prog_bar = self.desenhar_barra_progresso_pdf(esc['progresso'])
-                    ranking_data.append([
-                        Paragraph(str(idx), estilo_celula),
-                        Paragraph(esc['nome'], estilo_celula),
-                        prog_bar,
-                        Paragraph(f"{esc['alunos_avaliados']} / {esc['alunos_totais']} ({esc['progresso']:.1f}%)", estilo_celula),
-                        Paragraph(f"{esc['tempo_total_horas']:.1f}h", estilo_celula)
-                    ])
-                    
-                col_widths = [1*cm, 6.5*cm, 4*cm, 3.5*cm, 2*cm]
-                tabela_ranking = Table(ranking_data, colWidths=col_widths, repeatRows=1)
-                tabela_ranking.setStyle(TableStyle([
-                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2C3E50')),
-                    ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-                    ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                    ('TOPPADDING', (0, 0), (-1, -1), 5),
-                    ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
-                    ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CCCCCC')),
-                    ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.HexColor('#F8F9FA'), colors.white]),
-                ]))
-                story.append(tabela_ranking)
+            todas_escolas = list(set(escolas_infantil.keys()) | set(escolas_fundamental.keys()))
+            if todas_escolas:
+                story.append(Paragraph("<b>Relação de Escolas que Realizaram Avaliações:</b>", estilo_normal))
+                for escola in sorted(todas_escolas):
+                    total_infantil = escolas_infantil.get(escola, {}).get('total_alunos', 0)
+                    total_fundamental = escolas_fundamental.get(escola, {}).get('total_alunos', 0)
+                    story.append(Paragraph(f"• {escola}: {total_infantil} alunos (Infantil) + {total_fundamental} alunos (Fundamental) = {total_infantil + total_fundamental} total", estilo_normal))
             
             story.append(Spacer(1, 15))
         

@@ -947,6 +947,35 @@ body {
     border-bottom: none;
 }
 
+/* Barra de Progresso do Dashboard */
+.progress-bar-container {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 20px;
+    height: 18px;
+    width: 100%;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+}
+
+.progress-bar-fill {
+    height: 100%;
+    border-radius: 20px;
+    transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 0 8px rgba(78, 205, 196, 0.2);
+}
+
+.progress-bar-text {
+    position: absolute;
+    right: 8px;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-primary);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+
 /* Responsividade do Painel */
 @media (max-width: 900px) {
     .dashboard-grid {

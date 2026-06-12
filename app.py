@@ -215,6 +215,9 @@ def obter_dados():
             'todos': profs_todos,
             'total_professores': len(profs_todos)
         }
+        
+        # Consolidado de progresso das escolas
+        resposta_dados['escolas_progresso'] = dados.get('escolas_progresso')
 
         return jsonify({
             'dados': resposta_dados,

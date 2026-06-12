@@ -248,6 +248,50 @@ document.addEventListener('DOMContentLoaded', () => {
                 tbodyEscolas.appendChild(tr);
             });
 
+            // Tabela Nova: Ranking de Progresso das Escolas
+            const tbodyProgressoEscolas = document.querySelector('#table-progresso-escolas tbody');
+            if (tbodyProgressoEscolas) {
+                tbodyProgressoEscolas.innerHTML = '';
+                
+                const escolasProgList = Object.values(dados.escolas_progresso || {}).sort((a, b) => {
+                    if (b.progresso !== a.progresso) {
+                        return b.progresso - a.progresso; // Decrescente por progresso
+                    }
+                    if (b.tempo_total_horas !== a.tempo_total_horas) {
+                        return b.tempo_total_horas - a.tempo_total_horas; // Decrescente por tempo de dedicação
+                    }
+                    return a.nome.localeCompare(b.nome); // Crescente por nome
+                });
+
+                escolasProgList.forEach((esc, idx) => {
+                    const tr = document.createElement('tr');
+                    
+                    // Escolher cor da barra baseado no progresso
+                    let fillStyle = 'var(--gradient-teal)';
+                    if (esc.progresso >= 100) {
+                        fillStyle = 'var(--gradient-success)';
+                    } else if (esc.progresso <= 0) {
+                        fillStyle = 'transparent';
+                    }
+
+                    tr.innerHTML = `
+                        <td style="text-align: center; font-weight: 600; color: var(--text-secondary);">${idx + 1}</td>
+                        <td style="font-weight: 600; color: var(--text-primary);">${esc.nome}</td>
+                        <td>
+                            <div class="progress-bar-container">
+                                <div class="progress-bar-fill" style="width: ${esc.progresso}%; background: ${fillStyle};"></div>
+                                <span class="progress-bar-text">${esc.progresso.toFixed(1)}%</span>
+                            </div>
+                        </td>
+                        <td style="text-align: center; font-weight: 500;">
+                            ${esc.alunos_avaliados} <span style="color: var(--text-muted);">/</span> ${esc.alunos_totais}
+                        </td>
+                        <td style="text-align: center; font-weight: 600; color: var(--accent-teal);">${esc.tempo_total_horas.toFixed(1)}h</td>
+                    `;
+                    tbodyProgressoEscolas.appendChild(tr);
+                });
+            }
+
             // Tabela 2: Professores (Top 50 ordenados por dedicação)
             const tbodyProfessores = document.querySelector('#table-professores tbody');
             tbodyProfessores.innerHTML = '';
