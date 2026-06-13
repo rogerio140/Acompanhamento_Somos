@@ -9,16 +9,11 @@ from datetime import datetime
 from io import BytesIO
 import traceback
 import sys
-import hashlib
-try:
-    import _hashlib
-    _hashlib.openssl_md5 = hashlib.md5
-except Exception:
-    pass
+import json
+
 # Configure stdout to handle emojis in Windows console
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8')
-
 
 from database import Database
 from report_logic import RelatorioGenerator, gerar_relatorio_completo
@@ -237,12 +232,8 @@ def gerar_relatorio():
         municipio = request.form.get('municipio')
         tipo_relatorio = request.form.get('tipo_relatorio', 'completo')
         secoes_json = request.form.get('secoes', '[]')
-        
-        import json
-        try:
-            secoes = json.loads(secoes_json)
-        except json.JSONDecodeError:
-            secoes = ['geral', 'estagios', 'horarios', 'professores']
+
+        secoes = json.loads(secoes_json)
 
         if not municipio or municipio not in ('Viradouro', 'Rio Pardo'):
             return jsonify({'error': 'Município inválido'}), 400
@@ -300,7 +291,6 @@ def gerar_relatorio():
         print(f"\n❌ Erro ao gerar relatório: {e}")
         traceback.print_exc()
         return jsonify({'error': f'Erro ao gerar relatório: {str(e)}'}), 500
-
 
 
 if __name__ == '__main__':
