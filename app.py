@@ -140,8 +140,26 @@ def obter_dados():
             graficos['professores_dedicacao'] = to_b64(generator.criar_grafico_professores(
                 dados['professores']['todos']
             ))
+            
+            # ===== AJUSTE AQUI: Gráfico de dispersão com parâmetros corretos =====
+            # Determinar quais segmentos estão disponíveis
+            segmentos_disp = {
+                'infantil': dados['infantil'] is not None and len(dados['infantil'].get('tempos', [])) > 0,
+                'fundamental': dados['fundamental'] is not None and len(dados['fundamental'].get('tempos', [])) > 0
+            }
+            
+            # Calcular benchmarks por segmento (apenas para os disponíveis)
+            benchmarks = generator.definir_benchmark_avaliacao_por_segmento(
+                dados['professores']['todos'],
+                segmentos_disp,
+                metodo='percentil_25'
+            )
+            
+            # Gerar gráfico com os parâmetros corretos
             graficos['professores_dispersao'] = to_b64(generator.criar_grafico_dispersao_professores(
-                dados['professores']['todos']
+                dados['professores']['todos'],
+                benchmarks,
+                segmentos_disp
             ))
             
         # Outliers
@@ -223,7 +241,6 @@ def obter_dados():
         print(f"Erro ao obter dados: {e}")
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
-
 
 @app.route('/gerar-relatorio', methods=['POST'])
 def gerar_relatorio():
