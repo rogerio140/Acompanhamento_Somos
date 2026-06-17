@@ -311,6 +311,10 @@ class RelatorioGenerator:
         
         return dados
     
+
+
+
+
     def definir_benchmark_avaliacao_por_segmento(self, professores_dados, segmentos_disponiveis, metodo='percentil_25'):
         """
         Define o benchmark de tempo esperado por aluno para cada segmento disponível
@@ -357,7 +361,19 @@ class RelatorioGenerator:
             benchmarks[segmento] = benchmark
         
         return benchmarks
-    
+
+
+
+
+
+
+
+
+
+
+
+
+
     def calcular_regressao_detalhada(self, alunos, tempos):
         """Calcula métricas detalhadas da regressão linear"""
         if len(alunos) < 3:
@@ -857,7 +873,7 @@ class RelatorioGenerator:
         fig, ax = plt.subplots(figsize=(10, 6))
         
         dias = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']
-        horas = list(range(6, 24))  # Das 6h às 23h (exclui 0h-5h)
+        horas = list(range(6, 22))
         
         dados = np.zeros((len(horas), len(dias)))
         for i, hora in enumerate(horas):
@@ -983,10 +999,16 @@ class RelatorioGenerator:
         buffer.seek(0)
         return buffer
     
+
     def criar_grafico_dispersao_professores(self, professores_dados, benchmarks, segmentos_disponiveis):
         """
         Cria gráfico de dispersão: tempo total vs número de alunos por professor
         COM LINHAS DE REFERÊNCIA APENAS PARA SEGMENTOS DISPONÍVEIS
+        
+        Args:
+            professores_dados: Dicionário com dados dos professores
+            benchmarks: Dict com benchmarks por segmento {'infantil': 0.75, 'fundamental': 0.75}
+            segmentos_disponiveis: Dict com {'infantil': bool, 'fundamental': bool}
         """
         if not professores_dados:
             return None
@@ -1035,7 +1057,7 @@ class RelatorioGenerator:
                     config_disponiveis[segmento]['nomes'].append(nome)
                     config_disponiveis[segmento]['ids'].append(prof_id)
         
-        # Scatter plot por segmento
+        # ========== CRIAR SCATTER PLOT POR SEGMENTO ==========
         for seg, config in config_disponiveis.items():
             if config['tempos']:
                 ax.scatter(config['alunos'], config['tempos'], 
@@ -1059,7 +1081,12 @@ class RelatorioGenerator:
                                     bbox=dict(boxstyle='round,pad=0.3', facecolor='yellow', alpha=0.7),
                                     zorder=4)
         
-        # Linhas de referência
+        # ========== LINHAS DE TENDÊNCIA E BENCHMARK ==========
+        cores_tendencia = {
+            'infantil': '#E74C3C',
+            'fundamental': '#2980B9'
+        }
+        
         max_alunos = 0
         for config in config_disponiveis.values():
             if config['alunos']:
@@ -1075,6 +1102,27 @@ class RelatorioGenerator:
             config = config_disponiveis.get(seg, {})
             benchmark = benchmarks.get(seg, None)
             
+            # Linha de tendência (regressão)
+            if len(config.get('alunos', [])) > 1 and len(config.get('tempos', [])) > 1:
+                alunos_arr = np.array(config['alunos'])
+                tempos_arr = np.array(config['tempos'])
+                
+                if len(alunos_arr) > 1 and len(tempos_arr) > 1:
+                    z = np.polyfit(alunos_arr, tempos_arr, 1)
+                    p_tendencia = np.poly1d(z)
+                    x_tend = np.linspace(max(0, min(alunos_arr) * 0.8), max(alunos_arr) * 1.1, 100)
+                    y_tend = p_tendencia(x_tend)
+                    
+                    y_pred = p_tendencia(alunos_arr)
+                    ss_res = np.sum((tempos_arr - y_pred) ** 2)
+                    ss_tot = np.sum((tempos_arr - np.mean(tempos_arr)) ** 2)
+                    r_quadrado = 1 - (ss_res / ss_tot) if ss_tot > 0 else 0
+                    
+                    ax.plot(x_tend, y_tend, '--', linewidth=2.5, alpha=0.7,
+                        color=cores_tendencia.get(seg, '#95A5A6'),
+                        label=f'Tendência {config["nome"]} (R²={r_quadrado:.2f})')
+            
+            # Linhas de benchmark
             if benchmark:
                 y_ref = benchmark * x_ref
                 y_ref_superior = y_ref * (1 + tolerancia)
@@ -1086,12 +1134,12 @@ class RelatorioGenerator:
                 
                 ax.plot(x_ref, y_ref, '-', linewidth=2.5, alpha=0.8,
                     color=config['cor'], 
-                    label=f'Benchmark {config["nome"]} ({benchmark:.2f}h/aluno)')
+                    label=f'Benchmark {config["nome"]} ({benchmark:.2f}h/aluno - {benchmark*60:.0f}min)')
                 
                 ax.plot(x_ref, y_ref_superior, '--', linewidth=1, alpha=0.5, color=config['cor'])
                 ax.plot(x_ref, y_ref_inferior, '--', linewidth=1, alpha=0.5, color=config['cor'])
         
-        # Configurações do gráfico
+        # ========== CONFIGURAÇÕES DO GRÁFICO ==========
         ax.set_xlabel('Número de Alunos Avaliados', fontsize=12, fontweight='bold')
         ax.set_ylabel('Tempo Total de Dedicação (horas)', fontsize=12, fontweight='bold')
         
@@ -1109,13 +1157,14 @@ class RelatorioGenerator:
         
         ax.set_title(titulo, fontsize=14, fontweight='bold', pad=20)
         
-        # Legenda em 2 colunas
+        # ========== LEGENDA REPOSICIONADA - SEM SOBREPOSIÇÃO ==========
+        # Posicionar legenda no canto inferior direito com 2 colunas
         legend = ax.legend(
-            loc='lower right', 
+            loc='lower right',  # Canto inferior direito
             fontsize=8, 
             framealpha=0.92, 
             edgecolor='gray',
-            ncol=2,
+            ncol=2,  # 2 colunas para reduzir altura
             columnspacing=0.8,
             handlelength=1.5,
             handletextpad=0.5,
@@ -1129,6 +1178,47 @@ class RelatorioGenerator:
         ax.set_xlim(left=0)
         ax.set_ylim(bottom=0)
         
+        # ========== ESTATÍSTICAS NO CANTO SUPERIOR ESQUERDO ==========
+        stats_text = "Estatísticas por Segmento:\n"
+        stats_text += "-" * 40 + "\n"
+        
+        for seg in ['infantil', 'fundamental']:
+            if not segmentos_disponiveis.get(seg, False):
+                continue
+                
+            config = config_disponiveis.get(seg, {})
+            benchmark = benchmarks.get(seg, None)
+            
+            if config['alunos'] and benchmark:
+                pontos_acima = 0
+                pontos_abaixo = 0
+                pontos_esperados = 0
+                
+                for t, a in zip(config['tempos'], config['alunos']):
+                    if a > 0:
+                        tempo_esperado = benchmark * a
+                        if t > tempo_esperado * (1 + tolerancia):
+                            pontos_acima += 1
+                        elif t < tempo_esperado * (1 - tolerancia):
+                            pontos_abaixo += 1
+                        else:
+                            pontos_esperados += 1
+                
+                total = len(config['alunos'])
+                if total > 0:
+                    stats_text += f"\n{config['nome']}:\n"
+                    stats_text += f"  • Benchmark: {benchmark:.2f}h/aluno ({benchmark*60:.0f}min)\n"
+                    stats_text += f"  • Total: {total} professores\n"
+                    stats_text += f"  • Dentro da faixa: {pontos_esperados} ({pontos_esperados/total*100:.1f}%)\n"
+                    stats_text += f"  • Acima (menos eficientes): {pontos_acima} ({pontos_acima/total*100:.1f}%)\n"
+                    stats_text += f"  • Abaixo (mais eficientes): {pontos_abaixo} ({pontos_abaixo/total*100:.1f}%)\n"
+        
+        # Caixa de estatísticas no CANTO SUPERIOR ESQUERDO
+        ax.text(0.02, 0.98, stats_text, transform=ax.transAxes,
+            fontsize=7.5, verticalalignment='top',
+            bbox=dict(boxstyle='round', facecolor='white', alpha=0.92, edgecolor='gray'),
+            family='monospace')
+        
         plt.tight_layout()
         
         buffer = BytesIO()
@@ -1136,19 +1226,37 @@ class RelatorioGenerator:
         plt.close()
         buffer.seek(0)
         return buffer
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    # ========== MÉTODO PRINCIPAL DE GERAÇÃO DE PDF ==========
     
     def desenhar_barra_progresso_pdf(self, porcentagem):
         """Cria uma pequena tabela que serve como barra de progresso visual no PDF"""
-        from reportlab.platypus import Table, TableStyle
-        from reportlab.lib import colors
-        
-        largura_total = 100
+        largura_total = 100  # em pontos
         largura_preenchida = max(0, min(100, int(porcentagem)))
         largura_vazia = 100 - largura_preenchida
         
-        cor_barra = colors.HexColor('#4ECDC4')
+        cor_barra = colors.HexColor('#4ECDC4')  # Teal para progresso
         if porcentagem >= 100:
-            cor_barra = colors.HexColor('#2ecc71')
+            cor_barra = colors.HexColor('#2ecc71')  # Verde para 100%
             
         if largura_vazia <= 0:
             t = Table([['']], colWidths=[100], rowHeights=[8])
@@ -1176,7 +1284,15 @@ class RelatorioGenerator:
                 ('TOPPADDING', (0, 0), (-1, -1), 0),
             ]))
         return t
-    
+
+
+
+
+
+
+
+
+
     def criar_pdf(self, dados, municipio, tipo_relatorio='completo', secoes=None):
         """Cria o PDF do relatório"""
         buffer = BytesIO()
@@ -1270,7 +1386,7 @@ class RelatorioGenerator:
             if segmentos_disponiveis['fundamental']:
                 resumo_data[0].append(Paragraph('Ensino Fundamental', estilo_celula_header))
             
-            if dados.get('infantil'):
+            if dados['infantil']:
                 resumo_data.append([
                     Paragraph('Alunos Avaliados', estilo_celula),
                     Paragraph(str(len(dados['infantil']['tempos'])), estilo_celula)
@@ -1285,8 +1401,8 @@ class RelatorioGenerator:
                         Paragraph(format_valor(np.mean(dados['infantil']['tempos'])/60), estilo_celula)
                     ])
             
-            if dados.get('fundamental'):
-                if not dados.get('infantil'):
+            if dados['fundamental']:
+                if not dados['infantil']:
                     resumo_data.append([Paragraph('Alunos Avaliados', estilo_celula)])
                     resumo_data[-1].append(Paragraph(str(len(dados['fundamental']['tempos'])), estilo_celula))
                 else:
@@ -1297,7 +1413,7 @@ class RelatorioGenerator:
                         resumo_data[-1].append(Paragraph(str(len(dados['fundamental']['tempos'])), estilo_celula))
                 
                 if dados['fundamental']['tempos']:
-                    if not dados.get('infantil'):
+                    if not dados['infantil']:
                         resumo_data.append([Paragraph('Tempo Médio (min)', estilo_celula)])
                         resumo_data[-1].append(Paragraph(format_valor(np.mean(dados['fundamental']['tempos'])), estilo_celula))
                         resumo_data.append([Paragraph('Tempo Médio (h)', estilo_celula)])
@@ -1309,22 +1425,21 @@ class RelatorioGenerator:
                             resumo_data[3].append(Paragraph(format_valor(np.mean(dados['fundamental']['tempos'])/60), estilo_celula))
             
             col_widths = [5.5*cm] + [4.5*cm] * (len(resumo_data[0])-1)
-            if col_widths:
-                tabela = Table(resumo_data, colWidths=col_widths)
-                tabela.setStyle(TableStyle([
-                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2C3E50')),
-                    ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-                    ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                    ('TOPPADDING', (0, 0), (-1, -1), 6),
-                    ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-                    ('LEFTPADDING', (0, 0), (-1, -1), 4),
-                    ('RIGHTPADDING', (0, 0), (-1, -1), 4),
-                    ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#F8F9FA')),
-                    ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CCCCCC')),
-                    ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.HexColor('#F8F9FA'), colors.white]),
-                ]))
-                story.append(tabela)
-                story.append(Spacer(1, 15))
+            tabela = Table(resumo_data, colWidths=col_widths)
+            tabela.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2C3E50')),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('TOPPADDING', (0, 0), (-1, -1), 6),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                ('LEFTPADDING', (0, 0), (-1, -1), 4),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#F8F9FA')),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CCCCCC')),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.HexColor('#F8F9FA'), colors.white]),
+            ]))
+            story.append(tabela)
+            story.append(Spacer(1, 15))
         
         # ===== 2. ALUNOS AVALIADOS POR SEGMENTO =====
         if 'geral' in secoes and (segmentos_disponiveis['infantil'] or segmentos_disponiveis['fundamental']):
@@ -1332,8 +1447,8 @@ class RelatorioGenerator:
             sec_num += 1
             
             img_buffer = self.criar_grafico_barras_alunos(
-                dados['infantil'] if dados.get('infantil') else None,
-                dados['fundamental'] if dados.get('fundamental') else None
+                dados['infantil'] if dados['infantil'] else None,
+                dados['fundamental'] if dados['fundamental'] else None
             )
             if img_buffer:
                 imagem = Image(img_buffer, width=14*cm, height=8*cm)
@@ -1342,8 +1457,8 @@ class RelatorioGenerator:
                 story.append(Spacer(1, 10))
         
         # ===== 3. ESCOLAS QUE REALIZARAM AVALIAÇÕES =====
-        escolas_infantil = dados['infantil']['escolas'] if dados.get('infantil') else {}
-        escolas_fundamental = dados['fundamental']['escolas'] if dados.get('fundamental') else {}
+        escolas_infantil = dados['infantil']['escolas'] if dados['infantil'] else {}
+        escolas_fundamental = dados['fundamental']['escolas'] if dados['fundamental'] else {}
         
         if 'geral' in secoes and (escolas_infantil or escolas_fundamental):
             story.append(PageBreak())
@@ -1363,6 +1478,7 @@ class RelatorioGenerator:
                 story.append(Paragraph("<b>Ranking de Conclusão e Dedicação por Escola:</b>", estilo_normal))
                 story.append(Spacer(1, 5))
                 
+                # Cabeçalho da tabela
                 ranking_data = [
                     [
                         Paragraph('Pos', estilo_celula_header),
@@ -1373,6 +1489,7 @@ class RelatorioGenerator:
                     ]
                 ]
                 
+                # Ordenar escolas por progresso (decrescente), depois por tempo total (decrescente), depois por nome (crescente)
                 escolas_ordenadas = sorted(
                     escolas_progresso.values(),
                     key=lambda x: (-x['progresso'], -x['tempo_total_horas'], x['nome'])
@@ -1405,7 +1522,7 @@ class RelatorioGenerator:
         
         # ===== 4. MAPA DE CALOR - ESCOLAS E ESTÁGIOS =====
         if 'estagios' in secoes:
-            if dados.get('infantil') and dados['infantil']['escolas']:
+            if dados['infantil'] and dados['infantil']['escolas']:
                 story.append(PageBreak())
                 story.append(Paragraph(f"{sec_num}. MAPA DE CALOR - DISTRIBUIÇÃO DE ESTÁGIOS POR ESCOLA", estilo_subtitulo))
                 sec_num += 1
@@ -1423,7 +1540,7 @@ class RelatorioGenerator:
                     story.append(imagem)
                     story.append(Spacer(1, 10))
             
-            if dados.get('fundamental') and dados['fundamental']['escolas']:
+            if dados['fundamental'] and dados['fundamental']['escolas']:
                 story.append(PageBreak())
                 story.append(Paragraph("<b>Ensino Fundamental:</b>", estilo_normal))
                 story.append(Spacer(1, 5))
@@ -1440,14 +1557,14 @@ class RelatorioGenerator:
                     story.append(Spacer(1, 10))
         
         # ===== 5. TEMPO MÉDIO DE AVALIAÇÃO =====
-        if 'geral' in secoes and (dados.get('infantil') or dados.get('fundamental')):
+        if 'geral' in secoes and (dados['infantil'] or dados['fundamental']):
             story.append(PageBreak())
             story.append(Paragraph(f"{sec_num}. TEMPO MÉDIO DE AVALIAÇÃO POR ALUNO", estilo_subtitulo))
             sec_num += 1
             
             img_buffer = self.criar_grafico_barras_tempo(
-                dados['infantil'] if dados.get('infantil') else None,
-                dados['fundamental'] if dados.get('fundamental') else None
+                dados['infantil'] if dados['infantil'] else None,
+                dados['fundamental'] if dados['fundamental'] else None
             )
             if img_buffer:
                 imagem = Image(img_buffer, width=14*cm, height=8*cm)
@@ -1457,8 +1574,8 @@ class RelatorioGenerator:
         
         # ===== 6. DISTRIBUIÇÃO DOS TEMPOS =====
         if 'geral' in secoes:
-            tempos_infantil = dados['infantil']['tempos'] if dados.get('infantil') else []
-            tempos_fundamental = dados['fundamental']['tempos'] if dados.get('fundamental') else []
+            tempos_infantil = dados['infantil']['tempos'] if dados['infantil'] else []
+            tempos_fundamental = dados['fundamental']['tempos'] if dados['fundamental'] else []
             
             if tempos_infantil or tempos_fundamental:
                 story.append(PageBreak())
@@ -1477,7 +1594,7 @@ class RelatorioGenerator:
             story.append(Paragraph(f"{sec_num}. ANÁLISE DE TEMPOS ATÍPICOS (OUTLIERS)", estilo_subtitulo))
             sec_num += 1
             
-            if dados.get('infantil') and dados['infantil']['tempos']:
+            if dados['infantil'] and dados['infantil']['tempos']:
                 outliers_infantil = self.detectar_outliers(dados['infantil']['tempos'])
                 
                 story.append(Paragraph("<b>Educação Infantil:</b>", estilo_normal))
@@ -1495,7 +1612,7 @@ class RelatorioGenerator:
                     story.append(imagem)
                     story.append(Spacer(1, 15))
             
-            if dados.get('fundamental') and dados['fundamental']['tempos']:
+            if dados['fundamental'] and dados['fundamental']['tempos']:
                 outliers_fundamental = self.detectar_outliers(dados['fundamental']['tempos'])
                 
                 story.append(Paragraph("<b>Ensino Fundamental:</b>", estilo_normal))
@@ -1513,7 +1630,7 @@ class RelatorioGenerator:
                     story.append(imagem)
         
         # ===== 8. ANÁLISE DE HORÁRIOS =====
-        if 'horarios' in secoes and dados.get('horarios'):
+        if 'horarios' in secoes and dados['horarios']:
             story.append(PageBreak())
             story.append(Paragraph(f"{sec_num}. ANÁLISE DE HORÁRIOS DE FINALIZAÇÃO", estilo_subtitulo))
             sec_num += 1
@@ -1563,14 +1680,14 @@ class RelatorioGenerator:
             
             story.append(Spacer(1, 10))
             
-            # Definir benchmarks
+            # Definir benchmarks APENAS para segmentos disponíveis
             benchmarks = self.definir_benchmark_avaliacao_por_segmento(
                 dados['professores']['todos'], 
                 segmentos_disponiveis,
                 metodo='percentil_25'
             )
             
-            # Exibir benchmarks
+            # Exibir benchmarks por segmento (apenas os disponíveis)
             story.append(Paragraph("<b>Benchmarks por Segmento (Tempo esperado por aluno):</b>", estilo_normal))
             
             benchmark_data = [[
@@ -1608,9 +1725,10 @@ class RelatorioGenerator:
             
             story.append(Spacer(1, 10))
             
-            # Gráfico de dispersão
+            # Gráfico de dispersão com linhas apenas para segmentos disponíveis
             story.append(Paragraph("<b>Gráfico de Eficiência dos Professores</b>", estilo_normal))
             
+            # Texto explicativo baseado nos segmentos disponíveis
             if segmentos_disponiveis.get('infantil', False) and segmentos_disponiveis.get('fundamental', False):
                 story.append(Paragraph("<i>Análise comparativa entre Educação Infantil e Ensino Fundamental</i>", 
                                     ParagraphStyle('ItalicNote', parent=estilo_normal, fontSize=9, textColor=colors.HexColor('#7F8C8D'))))
@@ -1623,6 +1741,7 @@ class RelatorioGenerator:
             
             story.append(Spacer(1, 5))
             
+            # Usar o método com benchmarks e segmentos disponíveis
             img_buffer = self.criar_grafico_dispersao_professores(
                 dados['professores']['todos'], 
                 benchmarks,
@@ -1634,82 +1753,242 @@ class RelatorioGenerator:
                 story.append(imagem)
                 story.append(Spacer(1, 15))
             
-            # Tabela de classificação
+            # Tabela de classificação por eficiência
+            # Usar benchmark geral para compatibilidade (o primeiro disponível)
             benchmark_geral = benchmarks.get('fundamental', benchmarks.get('infantil', 0.75))
             classificacoes = self.criar_tabela_classificacao_eficiencia(dados['professores']['todos'], benchmark_geral, tolerancia=0.20)
             
             if classificacoes:
-                # Top professores
-                story.append(PageBreak())
-                story.append(Paragraph("<b>Top 15 Professores com Maior Tempo de Dedicação:</b>", estilo_normal))
+                story.append(Paragraph("<b>Classificação de Professores por Eficiência:</b>", estilo_normal))
                 story.append(Spacer(1, 5))
                 
-                img_buffer = self.criar_grafico_professores(dados['professores']['todos'])
-                if img_buffer:
-                    imagem = Image(img_buffer, width=16*cm, height=10*cm)
-                    imagem.hAlign = 'CENTER'
-                    story.append(imagem)
+                # Tabela resumo de contagem por segmento
+                story.append(Paragraph("<b>Resumo por Segmento:</b>", estilo_normal))
+                story.append(Spacer(1, 5))
+                
+                # Calcular estatísticas por segmento
+                resumo_segmentos = []
+                for seg in ['infantil', 'fundamental']:
+                    if segmentos_disponiveis.get(seg, False):
+                        benchmark_seg = benchmarks.get(seg, 0.75)
+                        
+                        # Contar professores do segmento
+                        profs_seg = [p for p in dados['professores']['todos'].values() 
+                                    if p.get('segmento') == seg or p.get('segmento') == 'ambos']
+                        
+                        if profs_seg:
+                            # Classificar professores do segmento
+                            from collections import Counter
+                            classificacoes_seg = self.criar_tabela_classificacao_eficiencia(
+                                {f'p_{i}': p for i, p in enumerate(profs_seg)}, 
+                                benchmark_seg, 
+                                tolerancia=0.20
+                            )
+                            
+                            contagem = Counter([c['eficiencia'] for c in classificacoes_seg])
+                            
+                            resumo_segmentos.append({
+                                'nome': 'Educação Infantil' if seg == 'infantil' else 'Ensino Fundamental',
+                                'total': len(profs_seg),
+                                'muito_abaixo': contagem.get('MUITO ABAIXO DO ESPERADO', 0),
+                                'abaixo': contagem.get('ABAIXO DO ESPERADO', 0),
+                                'dentro': contagem.get('DENTRO DO ESPERADO', 0),
+                                'eficiente': contagem.get('EFICIENTE', 0),
+                                'muito_eficiente': contagem.get('MUITO EFICIENTE', 0)
+                            })
+                
+                if resumo_segmentos:
+                    # Tabela de resumo por segmento
+                    tabela_resumo_seg = [
+                        ['Segmento', 'Total', 'Muito Abaixo', 'Abaixo', 'Dentro', 'Eficiente', 'Muito Eficiente']
+                    ]
+                    
+                    for rs in resumo_segmentos:
+                        tabela_resumo_seg.append([
+                            rs['nome'],
+                            str(rs['total']),
+                            str(rs['muito_abaixo']),
+                            str(rs['abaixo']),
+                            str(rs['dentro']),
+                            str(rs['eficiente']),
+                            str(rs['muito_eficiente'])
+                        ])
+                    
+                    col_widths = [3.5*cm, 1.5*cm, 2.5*cm, 2*cm, 2*cm, 2*cm, 2.5*cm]
+                    tabela_resumo = Table(tabela_resumo_seg, colWidths=col_widths)
+                    tabela_resumo.setStyle(TableStyle([
+                        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2C3E50')),
+                        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                        ('FONTSIZE', (0, 0), (-1, -1), 8),
+                        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CCCCCC')),
+                        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.HexColor('#F8F9FA'), colors.white]),
+                    ]))
+                    story.append(tabela_resumo)
                     story.append(Spacer(1, 15))
                 
-                # Tabela detalhada
-                story.append(Paragraph("<b>Detalhamento de Todos os Professores:</b>", estilo_normal))
+                # Lista detalhada dos professores que precisam de atenção (prioritários)
+                professores_prioritarios = [c for c in classificacoes if 'ABAIXO' in c['eficiencia'] or 'MUITO' in c['eficiencia']]
+                if professores_prioritarios:
+                    story.append(PageBreak())
+                    story.append(Paragraph("<b>Professores que Requerem Atenção Prioritária:</b>", 
+                                        ParagraphStyle('AlertTitle', parent=estilo_normal, textColor=colors.HexColor('#C0392B'), fontName=FONT_NAME)))
+                    story.append(Spacer(1, 5))
+                    
+                    tabela_prioritarios = [
+                        ['Professor', 'Segmento', 'Escola', 'Alunos', 'Tempo Real (h)', 'Tempo Esperado (h)', 'Desvio', 'Recomendação']
+                    ]
+                    
+                    for prof in professores_prioritarios[:30]:
+                        tabela_prioritarios.append([
+                            Paragraph(prof['professor'][:30], estilo_celula),
+                            Paragraph(prof.get('segmento', 'N/A'), estilo_celula),
+                            Paragraph(prof['escola'][:20], estilo_celula),
+                            str(prof['alunos']),
+                            f"{prof['tempo_real_horas']:.1f}",
+                            f"{prof['tempo_esperado_horas']:.1f}",
+                            f"{prof['desvio_percentual']:+.1f}%",
+                            Paragraph(prof['recomendacao'][:40], estilo_celula)
+                        ])
+                    
+                    col_widths = [3*cm, 2*cm, 2.5*cm, 1.5*cm, 2*cm, 2*cm, 1.5*cm, 3*cm]
+                    tabela_prior = Table(tabela_prioritarios, colWidths=col_widths)
+                    tabela_prior.setStyle(TableStyle([
+                        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2C3E50')),
+                        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                        ('FONTSIZE', (0, 0), (-1, -1), 7),
+                        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CCCCCC')),
+                        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.HexColor('#FFE5E5'), colors.white]),
+                    ]))
+                    story.append(tabela_prior)
+            
+            # Top professores com maior tempo de dedicação
+            story.append(PageBreak())
+            story.append(Paragraph("<b>Top 15 Professores com Maior Tempo de Dedicação:</b>", estilo_normal))
+            story.append(Spacer(1, 5))
+            
+            img_buffer = self.criar_grafico_professores(dados['professores']['todos'])
+            if img_buffer:
+                imagem = Image(img_buffer, width=16*cm, height=10*cm)
+                imagem.hAlign = 'CENTER'
+                story.append(imagem)
+                story.append(Spacer(1, 15))
+            
+            # Tabela detalhada de todos os professores
+            story.append(Paragraph("<b>Detalhamento de Todos os Professores:</b>", estilo_normal))
+            story.append(Spacer(1, 5))
+            
+            professores_ordenados = sorted(dados['professores']['todos'].items(), 
+                                        key=lambda x: x[1].get('tempo_total_horas', 0), reverse=True)
+            
+            prof_data = [
+                [Paragraph('Professor', estilo_celula_header),
+                Paragraph('Segmento', estilo_celula_header),
+                Paragraph('Escola', estilo_celula_header),
+                Paragraph('Alunos', estilo_celula_header),
+                Paragraph('Tempo Total (h)', estilo_celula_header),
+                Paragraph('Tempo Médio (min)', estilo_celula_header),
+                Paragraph('Benchmark Seg.', estilo_celula_header),
+                Paragraph('Eficiência', estilo_celula_header)]
+            ]
+            
+            # Criar dicionário de classificação rápida
+            classificacao_dict = {c['professor']: c['eficiencia'] for c in classificacoes} if classificacoes else {}
+            
+            for prof_id, dados_prof in professores_ordenados[:50]:
+                nome = dados_prof.get('nome', f'Professor {prof_id[:8]}')
+                eficiencia = classificacao_dict.get(nome, 'N/A')
+                segmento_prof = dados_prof.get('segmento', 'ambos')
+                
+                # Determinar benchmark apropriado para o segmento
+                if segmento_prof == 'infantil':
+                    benchmark_prof = benchmarks.get('infantil', 0.75)
+                elif segmento_prof == 'fundamental':
+                    benchmark_prof = benchmarks.get('fundamental', 0.75)
+                else:  # ambos - usar média dos disponíveis
+                    benchmarks_lista = [v for k, v in benchmarks.items() if segmentos_disponiveis.get(k, False)]
+                    benchmark_prof = np.mean(benchmarks_lista) if benchmarks_lista else 0.75
+                
+                # Definir cor de fundo baseada na eficiência
+                cor_fundo = '#FFFFFF'
+                if 'MUITO ABAIXO' in eficiencia:
+                    cor_fundo = '#FFE5E5'
+                elif 'ABAIXO' in eficiencia:
+                    cor_fundo = '#FFF3E0'
+                elif 'DENTRO' in eficiencia:
+                    cor_fundo = '#E8F5E9'
+                elif 'EFICIENTE' in eficiencia:
+                    cor_fundo = '#C8E6C9'
+                
+                prof_data.append([
+                    Paragraph(nome[:25], estilo_celula),
+                    Paragraph('Infantil' if segmento_prof == 'infantil' else 'Fundamental' if segmento_prof == 'fundamental' else 'Ambos', estilo_celula),
+                    Paragraph(dados_prof.get('escola', 'N/A')[:20], estilo_celula),
+                    Paragraph(str(dados_prof.get('total_alunos', 0)), estilo_celula),
+                    Paragraph(format_valor(dados_prof.get('tempo_total_horas', 0)), estilo_celula),
+                    Paragraph(format_valor(dados_prof.get('tempo_medio_aluno', 0)), estilo_celula),
+                    Paragraph(f"{benchmark_prof:.2f}h", estilo_celula),
+                    Paragraph(eficiencia, estilo_celula)
+                ])
+            
+            col_widths = [3*cm, 1.8*cm, 2.5*cm, 1.2*cm, 1.8*cm, 1.8*cm, 1.5*cm, 2.2*cm]
+            
+            tabela_prof = Table(prof_data, colWidths=col_widths, repeatRows=1)
+            tabela_prof.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2C3E50')),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('TOPPADDING', (0, 0), (-1, -1), 5),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+                ('FONTSIZE', (0, 0), (-1, -1), 7),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CCCCCC')),
+            ]))
+            
+            # Aplicar cores de fundo por linha
+            for i in range(1, len(prof_data)):
+                eficiencia = prof_data[i][7].getPlainText() if hasattr(prof_data[i][7], 'getPlainText') else str(prof_data[i][7])
+                if 'MUITO ABAIXO' in eficiencia:
+                    tabela_prof.setStyle(TableStyle([('BACKGROUND', (0, i), (-1, i), colors.HexColor('#FFE5E5'))]))
+                elif 'ABAIXO' in eficiencia:
+                    tabela_prof.setStyle(TableStyle([('BACKGROUND', (0, i), (-1, i), colors.HexColor('#FFF3E0'))]))
+                elif 'DENTRO' in eficiencia:
+                    tabela_prof.setStyle(TableStyle([('BACKGROUND', (0, i), (-1, i), colors.HexColor('#E8F5E9'))]))
+                elif 'EFICIENTE' in eficiencia:
+                    tabela_prof.setStyle(TableStyle([('BACKGROUND', (0, i), (-1, i), colors.HexColor('#C8E6C9'))]))
+            
+            story.append(tabela_prof)
+            
+            # Professores com alunos em tempos atípicos
+            professores_com_outliers = [
+                (prof_id, dados_prof) for prof_id, dados_prof in dados['professores']['todos'].items() 
+                if dados_prof.get('alunos_outliers')
+            ]
+            
+            if professores_com_outliers:
+                story.append(Spacer(1, 15))
+                story.append(Paragraph("<b>Professores com Alunos em Tempos Atípicos:</b>", 
+                                    ParagraphStyle('AlertTitle', parent=estilo_normal, textColor=colors.HexColor('#C0392B'), fontName=FONT_NAME)))
                 story.append(Spacer(1, 5))
                 
-                professores_ordenados = sorted(dados['professores']['todos'].items(), 
-                                            key=lambda x: x[1].get('tempo_total_horas', 0), reverse=True)
-                
-                prof_data = [
-                    [Paragraph('Professor', estilo_celula_header),
-                    Paragraph('Segmento', estilo_celula_header),
-                    Paragraph('Escola', estilo_celula_header),
-                    Paragraph('Alunos', estilo_celula_header),
-                    Paragraph('Tempo Total (h)', estilo_celula_header),
-                    Paragraph('Tempo Médio (min)', estilo_celula_header),
-                    Paragraph('Eficiência', estilo_celula_header)]
-                ]
-                
-                classificacao_dict = {c['professor']: c['eficiencia'] for c in classificacoes} if classificacoes else {}
-                
-                for prof_id, dados_prof in professores_ordenados[:50]:
+                for prof_id, dados_prof in professores_com_outliers[:10]:
                     nome = dados_prof.get('nome', f'Professor {prof_id[:8]}')
-                    eficiencia = classificacao_dict.get(nome, 'N/A')
-                    segmento_prof = dados_prof.get('segmento', 'ambos')
-                    
-                    prof_data.append([
-                        Paragraph(nome[:25], estilo_celula),
-                        Paragraph('Infantil' if segmento_prof == 'infantil' else 'Fundamental' if segmento_prof == 'fundamental' else 'Ambos', estilo_celula),
-                        Paragraph(dados_prof.get('escola', 'N/A')[:20], estilo_celula),
-                        Paragraph(str(dados_prof.get('total_alunos', 0)), estilo_celula),
-                        Paragraph(format_valor(dados_prof.get('tempo_total_horas', 0)), estilo_celula),
-                        Paragraph(format_valor(dados_prof.get('tempo_medio_aluno', 0)), estilo_celula),
-                        Paragraph(eficiencia, estilo_celula)
-                    ])
-                
-                col_widths = [3.2*cm, 1.8*cm, 2.5*cm, 1.2*cm, 1.8*cm, 1.8*cm, 2.2*cm]
-                
-                tabela_prof = Table(prof_data, colWidths=col_widths, repeatRows=1)
-                tabela_prof.setStyle(TableStyle([
-                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2C3E50')),
-                    ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-                    ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                    ('TOPPADDING', (0, 0), (-1, -1), 5),
-                    ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
-                    ('FONTSIZE', (0, 0), (-1, -1), 7),
-                    ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CCCCCC')),
-                ]))
-                
-                for i in range(1, len(prof_data)):
-                    eficiencia = prof_data[i][6].getPlainText() if hasattr(prof_data[i][6], 'getPlainText') else str(prof_data[i][6])
-                    if 'MUITO ABAIXO' in eficiencia:
-                        tabela_prof.setStyle(TableStyle([('BACKGROUND', (0, i), (-1, i), colors.HexColor('#FFE5E5'))]))
-                    elif 'ABAIXO' in eficiencia:
-                        tabela_prof.setStyle(TableStyle([('BACKGROUND', (0, i), (-1, i), colors.HexColor('#FFF3E0'))]))
-                    elif 'DENTRO' in eficiencia:
-                        tabela_prof.setStyle(TableStyle([('BACKGROUND', (0, i), (-1, i), colors.HexColor('#E8F5E9'))]))
-                    elif 'EFICIENTE' in eficiencia:
-                        tabela_prof.setStyle(TableStyle([('BACKGROUND', (0, i), (-1, i), colors.HexColor('#C8E6C9'))]))
-                
-                story.append(tabela_prof)
+                    story.append(Paragraph(f"• <b>{nome}</b> - {len(dados_prof.get('alunos_outliers', []))} aluno(s) com tempo atípico:", estilo_normal))
+                    for aluno_out in dados_prof.get('alunos_outliers', [])[:3]:
+                        if dados_prof.get('alunos_tempos'):
+                            tempos_array = np.array(dados_prof.get('alunos_tempos', [0]))
+                            if len(tempos_array) > 0:
+                                q1 = np.percentile(tempos_array, 25)
+                                classificacao = "MUITO RÁPIDO" if aluno_out.get('tempo_minutos', 0) < q1 else "MUITO LONGO"
+                            else:
+                                classificacao = "ATÍPICO"
+                        else:
+                            classificacao = "ATÍPICO"
+                        story.append(Paragraph(f"  - Aluno {aluno_out.get('aluno', 'N/A')}: {format_valor(aluno_out.get('tempo_minutos'))} min ({classificacao})", 
+                                            ParagraphStyle('AlertText', parent=estilo_normal, textColor=colors.HexColor('#E74C3C'), fontSize=9, fontName=FONT_NAME)))
+                    story.append(Spacer(1, 5))
         
         # ===== 10. CONCLUSÕES E RECOMENDAÇÕES =====
         story.append(PageBreak())
@@ -1724,20 +2003,21 @@ class RelatorioGenerator:
         if dados['professores']['todos']:
             story.append(Paragraph(f"• Total de professores envolvidos: <b>{len(dados['professores']['todos'])} professores</b>", estilo_normal))
         
-        if dados.get('infantil') and dados.get('fundamental'):
+        if dados['infantil'] and dados['fundamental']:
             total_inf = len(dados['infantil']['tempos'])
             total_fund = len(dados['fundamental']['tempos'])
             if total_inf > total_fund:
                 story.append(Paragraph(f"• Maior participação da Educação Infantil: {total_inf} alunos ({total_inf/dados['horarios']['total_alunos']*100:.1f}% do total)", estilo_normal))
             else:
                 story.append(Paragraph(f"• Maior participação do Ensino Fundamental: {total_fund} alunos ({total_fund/dados['horarios']['total_alunos']*100:.1f}% do total)", estilo_normal))
-        elif dados.get('infantil'):
+        elif dados['infantil']:
             total_inf = len(dados['infantil']['tempos'])
             story.append(Paragraph(f"• Total de alunos da Educação Infantil: {total_inf} alunos (100% do total)", estilo_normal))
-        elif dados.get('fundamental'):
+        elif dados['fundamental']:
             total_fund = len(dados['fundamental']['tempos'])
             story.append(Paragraph(f"• Total de alunos do Ensino Fundamental: {total_fund} alunos (100% do total)", estilo_normal))
         
+        # Adicionar recomendações baseadas na análise
         story.append(Spacer(1, 10))
         story.append(Paragraph("<b>Recomendações:</b>", estilo_subtitulo))
         
@@ -1747,7 +2027,7 @@ class RelatorioGenerator:
                 if prof_ineficientes > 0:
                     story.append(Paragraph(f"• {prof_ineficientes} professores estão abaixo da eficiência esperada. Recomenda-se capacitação e acompanhamento pedagógico.", estilo_normal))
         
-        if dados.get('horarios') and dados['horarios']['total_alunos'] > 0:
+        if dados['horarios'] and dados['horarios']['total_alunos'] > 0:
             hora_pico = max(dados['horarios']['horas'], key=dados['horarios']['horas'].get) if dados['horarios']['horas'] else None
             if hora_pico:
                 story.append(Paragraph(f"• Concentração de avaliações no horário das {hora_pico}:00h. Considerar distribuição de horários para melhor aproveitamento.", estilo_normal))
@@ -1759,6 +2039,15 @@ class RelatorioGenerator:
         doc.build(story)
         buffer.seek(0)
         return buffer
+
+
+
+
+
+
+
+
+
 
 
 # ============================================================================
