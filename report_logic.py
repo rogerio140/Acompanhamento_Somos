@@ -1227,7 +1227,229 @@ class RelatorioGenerator:
         buffer.seek(0)
         return buffer
 
+    # ========== CURVA DE APRENDIZAGEM ==========
 
+    def calcular_curva_referencia_geral(self, professores_dados):
+        """
+        Calcula a curva de referência geral de aprendizagem.
+        Para cada posição sequencial n (1ª avaliação, 2ª, etc.),
+        calcula a mediana dos tempos de todos os professores naquela posição.
+
+        Returns:
+            dict com:
+                'posicoes': lista de posições (1, 2, 3, ...)
+                'mediana': mediana do tempo (minutos) por posição
+                'q25': percentil 25
+                'q75': percentil 75
+        """
+        if not professores_dados:
+            return None
+
+        # Coletar tempos por posição
+        tempos_por_posicao = {}
+        for prof_id, dados in professores_dados.items():
+            detalhes = dados.get('alunos_detalhes', [])
+            if not detalhes:
+                continue
+
+            # Ordenar cronologicamente pelo campo 'inicio'
+            detalhes_sorted = sorted(
+                [d for d in detalhes if d.get('inicio')],
+                key=lambda x: x['inicio']
+            )
+
+            for idx, det in enumerate(detalhes_sorted):
+                pos = idx + 1  # Posição começa em 1
+                tempo_min = det.get('tempo_minutos', 0)
+                if tempo_min > 0:
+                    if pos not in tempos_por_posicao:
+                        tempos_por_posicao[pos] = []
+                    tempos_por_posicao[pos].append(tempo_min)
+
+        if not tempos_por_posicao:
+            return None
+
+        # Calcular estatísticas por posição (considerar apenas posições com >= 2 dados)
+        posicoes = []
+        medianas = []
+        q25_list = []
+        q75_list = []
+
+        for pos in sorted(tempos_por_posicao.keys()):
+            vals = tempos_por_posicao[pos]
+            if len(vals) >= 2:
+                posicoes.append(pos)
+                medianas.append(float(np.median(vals)))
+                q25_list.append(float(np.percentile(vals, 25)))
+                q75_list.append(float(np.percentile(vals, 75)))
+
+        if not posicoes:
+            return None
+
+        return {
+            'posicoes': posicoes,
+            'mediana': medianas,
+            'q25': q25_list,
+            'q75': q75_list
+        }
+
+    def criar_grafico_curva_aprendizagem_professor(self, prof_id, professores_dados, curva_referencia=None):
+        """
+        Cria gráfico de curva de aprendizagem individual de um professor.
+
+        O eixo X representa a sequência de avaliações (1ª, 2ª, 3ª...) ordenadas
+        cronologicamente. O eixo Y representa o tempo gasto em minutos em cada avaliação.
+        Compara com a curva de referência geral (mediana de todos os professores).
+
+        Args:
+            prof_id: ID do professor
+            professores_dados: Dicionário com dados de todos os professores
+            curva_referencia: resultado de calcular_curva_referencia_geral() (opcional)
+
+        Returns:
+            BytesIO buffer com imagem PNG, ou None em caso de dados insuficientes
+        """
+        if not professores_dados or prof_id not in professores_dados:
+            return None
+
+        dados_prof = professores_dados[prof_id]
+        detalhes = dados_prof.get('alunos_detalhes', [])
+
+        if not detalhes:
+            return None
+
+        # Ordenar avaliações cronologicamente
+        detalhes_sorted = sorted(
+            [d for d in detalhes if d.get('inicio') and d.get('tempo_minutos', 0) > 0],
+            key=lambda x: x['inicio']
+        )
+
+        if len(detalhes_sorted) < 2:
+            return None
+
+        posicoes_prof = list(range(1, len(detalhes_sorted) + 1))
+        tempos_prof = [d['tempo_minutos'] for d in detalhes_sorted]
+
+        nome_prof = dados_prof.get('nome', f'Professor {str(prof_id)[:8]}')
+        escola_prof = dados_prof.get('escola', 'N/A')
+        segmento_prof = dados_prof.get('segmento', 'ambos')
+
+        # --- Layout com 2 subplots: curva principal e histograma de distribuição ---
+        fig = plt.figure(figsize=(14, 8))
+        gs = fig.add_gridspec(1, 3, width_ratios=[2.5, 1, 0.05])
+        ax = fig.add_subplot(gs[0])
+        ax_hist = fig.add_subplot(gs[1])
+
+        cor_prof = '#4ECDC4'
+        cor_referencia = '#FF6B6B'
+        cor_faixa = '#FFD93D'
+
+        # ---- Plot dos dados do professor ----
+        ax.scatter(posicoes_prof, tempos_prof,
+                   color=cor_prof, s=70, zorder=5, alpha=0.85,
+                   edgecolors='white', linewidth=1.2,
+                   label=f'{nome_prof} (dados reais)')
+        ax.plot(posicoes_prof, tempos_prof,
+                color=cor_prof, linewidth=1.5, alpha=0.5, zorder=4)
+
+        # Média móvel do professor (janela de 3) para suavizar tendência
+        if len(tempos_prof) >= 3:
+            janela = min(3, len(tempos_prof))
+            media_movel = []
+            for i in range(len(tempos_prof)):
+                inicio_janela = max(0, i - janela + 1)
+                media_movel.append(np.mean(tempos_prof[inicio_janela:i+1]))
+            ax.plot(posicoes_prof, media_movel,
+                    color=cor_prof, linewidth=2.5, alpha=0.9,
+                    linestyle='-', zorder=4, label='Média Móvel (janela 3)')
+
+        # ---- Curva de referência geral ----
+        if curva_referencia and curva_referencia.get('posicoes'):
+            pos_ref = curva_referencia['posicoes']
+            med_ref = curva_referencia['mediana']
+            q25_ref = curva_referencia['q25']
+            q75_ref = curva_referencia['q75']
+
+            max_pos = max(posicoes_prof)
+            # Filtrar apenas posições dentro do range do professor
+            mask = [p <= max_pos + 2 for p in pos_ref]
+            pos_ref_filt = [p for p, m in zip(pos_ref, mask) if m]
+            med_ref_filt = [v for v, m in zip(med_ref, mask) if m]
+            q25_ref_filt = [v for v, m in zip(q25_ref, mask) if m]
+            q75_ref_filt = [v for v, m in zip(q75_ref, mask) if m]
+
+            if pos_ref_filt:
+                ax.plot(pos_ref_filt, med_ref_filt,
+                        color=cor_referencia, linewidth=2.5, linestyle='--',
+                        alpha=0.85, zorder=6,
+                        label='Curva de Referência Geral (mediana)')
+                ax.fill_between(pos_ref_filt, q25_ref_filt, q75_ref_filt,
+                                alpha=0.15, color=cor_referencia,
+                                label='Faixa IQR da Referência (Q25–Q75)')
+
+        # ---- Linha da média do professor ----
+        media_prof = np.mean(tempos_prof)
+        mediana_prof = np.median(tempos_prof)
+        ax.axhline(media_prof, color=cor_prof, linewidth=1.5, linestyle=':',
+                   alpha=0.7, label=f'Média: {media_prof:.1f} min')
+        ax.axhline(mediana_prof, color='#6C5CE7', linewidth=1.5, linestyle=':',
+                   alpha=0.7, label=f'Mediana: {mediana_prof:.1f} min')
+
+        # ---- Anotar tendência: crescente ou decrescente ----
+        if len(tempos_prof) >= 3:
+            slope, intercept, r_val, p_val, _ = stats.linregress(posicoes_prof, tempos_prof)
+            x_trend = np.array([1, max(posicoes_prof)])
+            y_trend = slope * x_trend + intercept
+            tendencia_cor = '#27AE60' if slope < 0 else '#E74C3C'
+            tendencia_texto = '▼ Melhora ao longo das avaliações' if slope < 0 else '▲ Tempo crescente ao longo das avaliações'
+            ax.plot(x_trend, y_trend, color=tendencia_cor,
+                    linewidth=2, linestyle='-.', alpha=0.7, zorder=3,
+                    label=f'Tendência (R²={r_val**2:.2f})')
+            # Texto de tendência
+            ax.text(0.98, 0.97, tendencia_texto,
+                    transform=ax.transAxes, fontsize=9, ha='right', va='top',
+                    color=tendencia_cor, fontweight='bold',
+                    bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.85, edgecolor=tendencia_cor))
+
+        # ---- Configurações do eixo principal ----
+        seg_label = {'infantil': 'Educação Infantil', 'fundamental': 'Ensino Fundamental'}.get(segmento_prof, 'Ambos')
+        ax.set_xlabel('Sequência de Avaliações (ordem cronológica)', fontsize=11, fontweight='bold')
+        ax.set_ylabel('Tempo da Avaliação (minutos)', fontsize=11, fontweight='bold')
+        ax.set_title(
+            f'Curva de Aprendizagem — {nome_prof}\n'
+            f'Escola: {escola_prof}  |  Segmento: {seg_label}  |  Total: {len(tempos_prof)} avaliações',
+            fontsize=12, fontweight='bold', pad=15
+        )
+        ax.set_xlim(left=0.5)
+        ax.set_ylim(bottom=0)
+        ax.grid(alpha=0.3, linestyle='--')
+        ax.set_facecolor('#f8f9fa')
+        ax.legend(loc='upper right', fontsize=8, framealpha=0.92, ncol=1)
+
+        # ---- Subplot histograma (distribuição dos tempos do professor) ----
+        ax_hist.hist(tempos_prof, bins=min(10, len(tempos_prof)),
+                     orientation='horizontal', color=cor_prof, alpha=0.7,
+                     edgecolor='white', linewidth=0.8)
+        ax_hist.axhline(media_prof, color=cor_prof, linewidth=2, linestyle=':',
+                        alpha=0.9, label=f'Média: {media_prof:.1f}')
+        ax_hist.axhline(mediana_prof, color='#6C5CE7', linewidth=2, linestyle=':',
+                        alpha=0.9)
+        ax_hist.set_xlabel('Freq.', fontsize=9)
+        ax_hist.set_ylabel('')
+        ax_hist.set_title('Distribuição', fontsize=9, fontweight='bold')
+        ax_hist.grid(alpha=0.3, linestyle='--')
+        ax_hist.set_facecolor('#f8f9fa')
+
+        # Sincronizar eixo Y do histograma com o eixo principal
+        ax_hist.set_ylim(ax.get_ylim())
+
+        plt.tight_layout()
+
+        buffer = BytesIO()
+        plt.savefig(buffer, format='png', dpi=130, bbox_inches='tight', facecolor='white')
+        plt.close()
+        buffer.seek(0)
+        return buffer
 
 
 
