@@ -214,15 +214,6 @@ def obter_dados():
         profs_todos = {}
         if dados.get('professores') and dados['professores'].get('todos'):
             for prof_id, prof_info in dados['professores']['todos'].items():
-                # Serializar alunos_detalhes garantindo que datas sejam string
-                detalhes_serializados = []
-                for det in prof_info.get('alunos_detalhes', []):
-                    detalhes_serializados.append({
-                        'aluno': str(det.get('aluno', '')),
-                        'tempo_minutos': round(det.get('tempo_minutos', 0), 2),
-                        'inicio': str(det.get('inicio', '')) if det.get('inicio') else None,
-                        'fim': str(det.get('fim', '')) if det.get('fim') else None
-                    })
                 profs_todos[str(prof_id)] = {
                     'nome': prof_info.get('nome'),
                     'escola': prof_info.get('escola'),
@@ -230,8 +221,7 @@ def obter_dados():
                     'total_alunos': prof_info.get('total_alunos'),
                     'tempo_total_horas': round(prof_info.get('tempo_total_horas', 0), 2),
                     'tempo_medio_aluno': round(prof_info.get('tempo_medio_aluno', 0), 2),
-                    'alunos_outliers': prof_info.get('alunos_outliers', []),
-                    'alunos_detalhes': detalhes_serializados
+                    'alunos_outliers': prof_info.get('alunos_outliers', [])
                 }
                 
         resposta_dados['professores'] = {
@@ -251,67 +241,6 @@ def obter_dados():
         print(f"Erro ao obter dados: {e}")
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
-
-@app.route('/curva-aprendizagem-professor', methods=['POST'])
-def curva_aprendizagem_professor():
-    """Gera o gráfico de curva de aprendizagem individual de um professor"""
-    try:
-        data = request.json
-        municipio = data.get('municipio')
-        prof_id = data.get('prof_id')
-
-        if not municipio or municipio not in ('Viradouro', 'Rio Pardo'):
-            return jsonify({'error': 'Município inválido'}), 400
-        if not prof_id:
-            return jsonify({'error': 'Professor não especificado'}), 400
-
-        db = Database(municipio=municipio)
-        generator = RelatorioGenerator(db)
-        dados = generator.coletar_dados()
-
-        professores_todos = dados.get('professores', {}).get('todos', {})
-        if not professores_todos:
-            return jsonify({'error': 'Sem dados de professores'}), 404
-
-        if str(prof_id) not in professores_todos:
-            return jsonify({'error': 'Professor não encontrado'}), 404
-
-        # Calcular curva de referência geral
-        curva_ref = generator.calcular_curva_referencia_geral(professores_todos)
-
-        # Gerar gráfico
-        buf = generator.criar_grafico_curva_aprendizagem_professor(
-            str(prof_id), professores_todos, curva_ref
-        )
-
-        import base64
-        grafico_b64 = base64.b64encode(buf.getvalue()).decode('utf-8') if buf else None
-
-        # Estatísticas individuais
-        prof_info = professores_todos[str(prof_id)]
-        tempos = prof_info.get('alunos_tempos', [])
-        stats_ind = {}
-        if tempos:
-            import numpy as np_local
-            stats_ind = {
-                'media': round(float(np_local.mean(tempos)), 2),
-                'mediana': round(float(np_local.median(tempos)), 2),
-                'min': round(float(np_local.min(tempos)), 2),
-                'max': round(float(np_local.max(tempos)), 2),
-                'std': round(float(np_local.std(tempos)), 2),
-            }
-
-        return jsonify({
-            'grafico': grafico_b64,
-            'stats': stats_ind,
-            'curva_referencia': curva_ref
-        })
-
-    except Exception as e:
-        print(f"Erro ao gerar curva de aprendizagem: {e}")
-        traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
-
 
 @app.route('/gerar-relatorio', methods=['POST'])
 def gerar_relatorio():
