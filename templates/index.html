@@ -35,29 +35,27 @@
         <form id="report-form" action="{{ url_for('gerar_relatorio') }}" method="POST">
             
             <div class="glass-card animate-in">
-                <h2 class="glass-card__title">
-                    <i class="fa-solid fa-map-location-dot icon"></i>
-                    Selecione o Município
-                </h2>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
+                    <h2 class="glass-card__title" style="margin-bottom: 0;">
+                        <i class="fa-solid fa-map-location-dot icon"></i>
+                        Selecione o Município
+                    </h2>
+                    <button type="button" id="btn-gerenciar-bancos" class="btn-manage-db">
+                        <i class="fa-solid fa-database"></i> Gerenciar Bancos
+                    </button>
+                </div>
                 
-                <div class="radio-group">
-                    <div class="radio-card">
-                        <input type="radio" id="mun-vd" name="municipio" value="Viradouro" required>
-                        <label for="mun-vd" class="radio-card__label">
-                            <i class="fa-solid fa-city radio-card__icon" style="color: var(--accent-blue);"></i>
-                            <span class="radio-card__name">Viradouro</span>
-                            <span class="radio-card__desc">Base de dados VD</span>
+                <div class="radio-group" id="municipio-radio-group">
+                    {% for name in municipios %}
+                    <div class="radio-card" data-municipio="{{ name }}">
+                        <input type="radio" id="mun-{{ loop.index }}" name="municipio" value="{{ name }}" required>
+                        <label for="mun-{{ loop.index }}" class="radio-card__label">
+                            <i class="fa-solid {% if loop.index % 2 == 0 %}fa-tree-city{% else %}fa-city{% endif %} radio-card__icon" style="color: {% if loop.index % 2 == 0 %}var(--accent-teal){% else %}var(--accent-blue){% endif %};"></i>
+                            <span class="radio-card__name">{{ name }}</span>
+                            <span class="radio-card__desc">Base de dados {{ name }}</span>
                         </label>
                     </div>
-                    
-                    <div class="radio-card">
-                        <input type="radio" id="mun-rp" name="municipio" value="Rio Pardo" required>
-                        <label for="mun-rp" class="radio-card__label">
-                            <i class="fa-solid fa-tree-city radio-card__icon" style="color: var(--accent-teal);"></i>
-                            <span class="radio-card__name">Rio Pardo</span>
-                            <span class="radio-card__desc">Base de dados RP</span>
-                        </label>
-                    </div>
+                    {% endfor %}
                 </div>
 
                 <!-- Painel de Status (AJAX) -->
@@ -159,6 +157,9 @@
                     </button>
                     <button type="button" class="tab-btn" data-tab="tab-professores">
                         <i class="fa-solid fa-graduation-cap"></i> Professores & Dedicação
+                    </button>
+                    <button type="button" class="tab-btn" data-tab="tab-curva-aprendizagem">
+                        <i class="fa-solid fa-chart-line"></i> Curva de Aprendizagem
                     </button>
                 </div>
                 
@@ -338,7 +339,150 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Tab Content: Curva de Aprendizagem -->
+                <div id="tab-curva-aprendizagem" class="tab-content">
+
+                    <!-- Card de seleção de professor -->
+                    <div class="chart-card large animate-in" id="card-curva-selector">
+                        <div class="curva-header">
+                            <div class="curva-header__left">
+                                <h3 style="margin:0; display:flex; align-items:center; gap:10px;">
+                                    <i class="fa-solid fa-user-chart" style="color: var(--accent-teal);"></i>
+                                    Análise Individual — Curva de Aprendizagem
+                                </h3>
+                                <p style="margin: 6px 0 0; color: var(--text-muted); font-size: 13px;">
+                                    Selecione um professor para visualizar como o tempo de avaliação evoluiu ao longo das avaliações realizadas.
+                                </p>
+                            </div>
+                            <div class="curva-header__right">
+                                <div class="curva-select-wrapper">
+                                    <label for="select-professor" style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:6px;">
+                                        <i class="fa-solid fa-chalkboard-user" style="margin-right:4px;"></i> Professor
+                                    </label>
+                                    <select id="select-professor" class="curva-select">
+                                        <option value="">-- Selecione um professor --</option>
+                                    </select>
+                                </div>
+                                <button type="button" id="btn-gerar-curva" class="btn-curva" disabled>
+                                    <i class="fa-solid fa-chart-line"></i> Gerar Curva
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- KPIs individuais do professor -->
+                        <div id="curva-kpis" class="curva-kpis" style="display:none;">
+                            <div class="curva-kpi-card">
+                                <i class="fa-solid fa-clock"></i>
+                                <div>
+                                    <span class="curva-kpi-label">Tempo Médio</span>
+                                    <span class="curva-kpi-value" id="ckpi-media">-</span>
+                                </div>
+                            </div>
+                            <div class="curva-kpi-card">
+                                <i class="fa-solid fa-chart-bar"></i>
+                                <div>
+                                    <span class="curva-kpi-label">Mediana</span>
+                                    <span class="curva-kpi-value" id="ckpi-mediana">-</span>
+                                </div>
+                            </div>
+                            <div class="curva-kpi-card">
+                                <i class="fa-solid fa-arrow-down-short-wide"></i>
+                                <div>
+                                    <span class="curva-kpi-label">Mínimo</span>
+                                    <span class="curva-kpi-value" id="ckpi-min">-</span>
+                                </div>
+                            </div>
+                            <div class="curva-kpi-card">
+                                <i class="fa-solid fa-arrow-up-wide-short"></i>
+                                <div>
+                                    <span class="curva-kpi-label">Máximo</span>
+                                    <span class="curva-kpi-value" id="ckpi-max">-</span>
+                                </div>
+                            </div>
+                            <div class="curva-kpi-card">
+                                <i class="fa-solid fa-wave-square"></i>
+                                <div>
+                                    <span class="curva-kpi-label">Desvio Padrão</span>
+                                    <span class="curva-kpi-value" id="ckpi-std">-</span>
+                                </div>
+                            </div>
+                            <div class="curva-kpi-card">
+                                <i class="fa-solid fa-users"></i>
+                                <div>
+                                    <span class="curva-kpi-label">Total Avaliações</span>
+                                    <span class="curva-kpi-value" id="ckpi-total">-</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Gráfico da curva de aprendizagem -->
+                    <div class="chart-card large animate-in" id="card-curva-grafico" style="display:none;">
+                        <div class="curva-grafico-header">
+                            <h3 id="curva-grafico-titulo" style="margin:0;">
+                                <i class="fa-solid fa-chart-line" style="color: var(--accent-teal);"></i>
+                                Curva de Aprendizagem
+                            </h3>
+                            <div class="curva-legenda">
+                                <span class="curva-legenda-item">
+                                    <span class="curva-legenda-dot" style="background: #4ECDC4;"></span>
+                                    Dados do Professor
+                                </span>
+                                <span class="curva-legenda-item">
+                                    <span class="curva-legenda-dot" style="background: #FF6B6B;"></span>
+                                    Referência Geral (mediana)
+                                </span>
+                                <span class="curva-legenda-item">
+                                    <span class="curva-legenda-dot" style="background: #FFD93D; opacity: 0.6; border: 1px dashed #aaa;"></span>
+                                    Faixa IQR Referência
+                                </span>
+                            </div>
+                        </div>
+                        <div id="curva-loading" class="curva-loading" style="display:none;">
+                            <div class="curva-spinner"></div>
+                            <span>Gerando curva de aprendizagem...</span>
+                        </div>
+                        <div class="chart-wrapper" id="curva-chart-wrapper">
+                            <img id="img-curva-aprendizagem" src="" alt="Curva de Aprendizagem" style="display:none; width:100%; border-radius:8px;">
+                        </div>
+                        <div class="curva-insight" id="curva-insight" style="display:none;">
+                            <i class="fa-solid fa-lightbulb" style="color: var(--accent-yellow);"></i>
+                            <p id="curva-insight-texto"></p>
+                        </div>
+                    </div>
+
+                    <!-- Curva de Referência Geral -->
+                    <div class="chart-card large animate-in" id="card-curva-referencia" style="display:none;">
+                        <h3 style="margin:0 0 16px;">
+                            <i class="fa-solid fa-users" style="color: var(--accent-coral);"></i>
+                            Curva de Referência Geral — Modelo Esperado
+                        </h3>
+                        <p style="color: var(--text-muted); font-size: 13px; margin: 0 0 16px;">
+                            Mediana do tempo de avaliação por posição sequencial de <strong>todos os professores</strong>.
+                            Representa o comportamento esperado (aprendizagem coletiva do grupo).
+                        </p>
+                        <div class="curva-ref-table-wrapper">
+                            <table class="dashboard-table" id="table-curva-ref">
+                                <thead>
+                                    <tr>
+                                        <th style="text-align:center;">Nº Avaliação</th>
+                                        <th style="text-align:center;">Mediana Geral (min)</th>
+                                        <th style="text-align:center;">Q25 (min)</th>
+                                        <th style="text-align:center;">Q75 (min)</th>
+                                        <th style="text-align:center;">Comparação c/ Prof.</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tbody-curva-ref">
+                                    <!-- Dinâmico -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                </div>
             </div>
+
         </div>
 
         <footer class="footer animate-in">
@@ -347,7 +491,78 @@
     </div>
 
     <!-- Overlay de Progresso (Gerando PDF) -->
-    <!-- Modal de Configuração do Relatório -->
+    <!-- Modal de Gerenciamento de Bancos de Dados -->
+    <div id="db-modal-overlay" class="modal-overlay">
+        <div class="modal-card" style="max-width: 600px;">
+            <div class="modal-header">
+                <h3 class="modal-title">
+                    <i class="fa-solid fa-database" style="color: var(--accent-teal);"></i>
+                    Gerenciar Municípios & Bancos de Dados
+                </h3>
+                <button type="button" id="db-modal-close" class="modal-close">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            
+            <div class="modal-body">
+                <div class="db-section">
+                    <h4 class="sections-label" style="margin-bottom: 12px;">Municípios Cadastrados</h4>
+                    <div id="db-list" class="db-list">
+                        <!-- Carregado via AJAX -->
+                    </div>
+                </div>
+
+                <div class="db-section" style="margin-top: 24px; padding-top: 20px; border-top: 1px solid rgba(255, 255, 255, 0.08);">
+                    <h4 class="sections-label" style="margin-bottom: 12px;">Adicionar Novo Município</h4>
+                    <form id="add-db-form" class="db-form">
+                        <div class="form-grid">
+                            <div class="form-field">
+                                <label for="db-name">Nome do Município</label>
+                                <input type="text" id="db-name" name="name" placeholder="Ex: Viradouro" required>
+                            </div>
+                            <div class="form-field">
+                                <label for="db-host">Host do Banco</label>
+                                <input type="text" id="db-host" name="host" placeholder="Ex: host.render.com" required>
+                            </div>
+                            <div class="form-field">
+                                <label for="db-port">Porta</label>
+                                <input type="text" id="db-port" name="port" value="5432" required>
+                            </div>
+                            <div class="form-field">
+                                <label for="db-dbname">Nome do Banco (dbname)</label>
+                                <input type="text" id="db-dbname" name="dbname" placeholder="Ex: somos_educa" required>
+                            </div>
+                            <div class="form-field">
+                                <label for="db-user">Usuário</label>
+                                <input type="text" id="db-user" name="user" placeholder="Ex: user_name" required>
+                            </div>
+                            <div class="form-field">
+                                <label for="db-password">Senha</label>
+                                <input type="password" id="db-password" name="password" placeholder="Senha do banco" required>
+                            </div>
+                            <div class="form-field" style="grid-column: span 2;">
+                                <label for="db-sslmode">SSL Mode</label>
+                                <select id="db-sslmode" name="sslmode">
+                                    <option value="require" selected>require</option>
+                                    <option value="disable">disable</option>
+                                    <option value="allow">allow</option>
+                                    <option value="prefer">prefer</option>
+                                    <option value="verify-ca">verify-ca</option>
+                                    <option value="verify-full">verify-full</option>
+                                </select>
+                            </div>
+                        </div>
+                        <button type="submit" id="btn-add-db" class="btn-submit" style="margin-top: 20px; padding: 14px 20px; font-size: 14px;">
+                            <span class="btn-text">Adicionar Município</span>
+                            <i class="fa-solid fa-plus btn-icon"></i>
+                            <div class="spinner"></div>
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div id="report-modal-overlay" class="modal-overlay">
         <div class="modal-card">
             <div class="modal-header">

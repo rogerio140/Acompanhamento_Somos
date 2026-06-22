@@ -16,6 +16,7 @@ if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8')
 
 from database import Database
+from config import Config
 from report_logic import RelatorioGenerator, gerar_relatorio_completo
 
 app = Flask(__name__)
@@ -24,7 +25,8 @@ app = Flask(__name__)
 @app.route('/')
 def index():
     """Página principal com formulário de geração de relatório"""
-    return render_template('index.html')
+    municipios = list(Config.DB_CONFIGS.keys())
+    return render_template('index.html', municipios=municipios)
 
 
 @app.route('/verificar-segmentos', methods=['POST'])
@@ -32,7 +34,7 @@ def verificar_segmentos():
     """Endpoint AJAX para verificar segmentos disponíveis no município"""
     try:
         municipio = request.json.get('municipio')
-        if not municipio or municipio not in ('Viradouro', 'Rio Pardo'):
+        if not municipio or municipio not in Config.DB_CONFIGS:
             return jsonify({'error': 'Município inválido'}), 400
 
         db = Database(municipio=municipio)
@@ -63,7 +65,7 @@ def obter_dados():
     try:
         data = request.json
         municipio = data.get('municipio')
-        if not municipio or municipio not in ('Viradouro', 'Rio Pardo'):
+        if not municipio or municipio not in Config.DB_CONFIGS:
             return jsonify({'error': 'Município inválido'}), 400
 
         print(f"\n📊 [Dashboard] Carregando dados para {municipio}...")
@@ -214,6 +216,15 @@ def obter_dados():
         profs_todos = {}
         if dados.get('professores') and dados['professores'].get('todos'):
             for prof_id, prof_info in dados['professores']['todos'].items():
+                # Serializar alunos_detalhes garantindo que datas sejam string
+                detalhes_serializados = []
+                for det in prof_info.get('alunos_detalhes', []):
+                    detalhes_serializados.append({
+                        'aluno': str(det.get('aluno', '')),
+                        'tempo_minutos': round(det.get('tempo_minutos', 0), 2),
+                        'inicio': str(det.get('inicio', '')) if det.get('inicio') else None,
+                        'fim': str(det.get('fim', '')) if det.get('fim') else None
+                    })
                 profs_todos[str(prof_id)] = {
                     'nome': prof_info.get('nome'),
                     'escola': prof_info.get('escola'),
@@ -221,7 +232,8 @@ def obter_dados():
                     'total_alunos': prof_info.get('total_alunos'),
                     'tempo_total_horas': round(prof_info.get('tempo_total_horas', 0), 2),
                     'tempo_medio_aluno': round(prof_info.get('tempo_medio_aluno', 0), 2),
-                    'alunos_outliers': prof_info.get('alunos_outliers', [])
+                    'alunos_outliers': prof_info.get('alunos_outliers', []),
+                    'alunos_detalhes': detalhes_serializados
                 }
                 
         resposta_dados['professores'] = {
@@ -242,6 +254,67 @@ def obter_dados():
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
+@app.route('/curva-aprendizagem-professor', methods=['POST'])
+def curva_aprendizagem_professor():
+    """Gera o gráfico de curva de aprendizagem individual de um professor"""
+    try:
+        data = request.json
+        municipio = data.get('municipio')
+        prof_id = data.get('prof_id')
+
+        if not municipio or municipio not in Config.DB_CONFIGS:
+            return jsonify({'error': 'Município inválido'}), 400
+        if not prof_id:
+            return jsonify({'error': 'Professor não especificado'}), 400
+
+        db = Database(municipio=municipio)
+        generator = RelatorioGenerator(db)
+        dados = generator.coletar_dados()
+
+        professores_todos = dados.get('professores', {}).get('todos', {})
+        if not professores_todos:
+            return jsonify({'error': 'Sem dados de professores'}), 404
+
+        if str(prof_id) not in professores_todos:
+            return jsonify({'error': 'Professor não encontrado'}), 404
+
+        # Calcular curva de referência geral
+        curva_ref = generator.calcular_curva_referencia_geral(professores_todos)
+
+        # Gerar gráfico
+        buf = generator.criar_grafico_curva_aprendizagem_professor(
+            str(prof_id), professores_todos, curva_ref
+        )
+
+        import base64
+        grafico_b64 = base64.b64encode(buf.getvalue()).decode('utf-8') if buf else None
+
+        # Estatísticas individuais
+        prof_info = professores_todos[str(prof_id)]
+        tempos = prof_info.get('alunos_tempos', [])
+        stats_ind = {}
+        if tempos:
+            import numpy as np_local
+            stats_ind = {
+                'media': round(float(np_local.mean(tempos)), 2),
+                'mediana': round(float(np_local.median(tempos)), 2),
+                'min': round(float(np_local.min(tempos)), 2),
+                'max': round(float(np_local.max(tempos)), 2),
+                'std': round(float(np_local.std(tempos)), 2),
+            }
+
+        return jsonify({
+            'grafico': grafico_b64,
+            'stats': stats_ind,
+            'curva_referencia': curva_ref
+        })
+
+    except Exception as e:
+        print(f"Erro ao gerar curva de aprendizagem: {e}")
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/gerar-relatorio', methods=['POST'])
 def gerar_relatorio():
     """Gera o relatório PDF e retorna para download"""
@@ -252,7 +325,7 @@ def gerar_relatorio():
 
         secoes = json.loads(secoes_json)
 
-        if not municipio or municipio not in ('Viradouro', 'Rio Pardo'):
+        if not municipio or municipio not in Config.DB_CONFIGS:
             return jsonify({'error': 'Município inválido'}), 400
 
         # Determinar tipo efetivo para o PDF
@@ -308,6 +381,96 @@ def gerar_relatorio():
         print(f"\n❌ Erro ao gerar relatório: {e}")
         traceback.print_exc()
         return jsonify({'error': f'Erro ao gerar relatório: {str(e)}'}), 500
+
+
+@app.route('/api/config/databases', methods=['GET'])
+def get_databases():
+    """Retorna a lista de bancos de dados configurados"""
+    try:
+        configs = Config.load_db_configs()
+        # Retornar as configurações de todos os municípios
+        return jsonify(configs)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/config/databases', methods=['POST'])
+def add_database():
+    """Adiciona ou atualiza a configuração de um município, testando a conexão antes de salvar"""
+    try:
+        data = request.json
+        name = data.get('name', '').strip()
+        host = data.get('host', '').strip()
+        port = str(data.get('port', '5432')).strip()
+        dbname = data.get('dbname', '').strip()
+        user = data.get('user', '').strip()
+        password = data.get('password', '').strip()
+        sslmode = data.get('sslmode', 'require').strip()
+
+        if not name or not host or not dbname or not user or not password:
+            return jsonify({'error': 'Todos os campos obrigatórios devem ser preenchidos.'}), 400
+
+        # Validar conexão com o banco de dados antes de salvar
+        try:
+            import psycopg2
+            conn = psycopg2.connect(
+                host=host,
+                port=port,
+                dbname=dbname,
+                user=user,
+                password=password,
+                sslmode=sslmode,
+                connect_timeout=4  # Timeout de 4 segundos
+            )
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1;")
+            cursor.close()
+            conn.close()
+        except Exception as conn_err:
+            return jsonify({
+                'error': f'Falha ao conectar no banco de dados. Verifique as credenciais. Detalhe: {str(conn_err)}'
+            }), 400
+
+        # Salvar no JSON
+        configs = Config.load_db_configs()
+        configs[name] = {
+            "host": host,
+            "port": port,
+            "dbname": dbname,
+            "user": user,
+            "password": password,
+            "sslmode": sslmode
+        }
+        Config.save_db_configs(configs)
+
+        return jsonify({'message': f'Município {name} configurado e testado com sucesso!'})
+
+    except Exception as e:
+        print(f"Erro ao adicionar município: {e}")
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/config/databases/<name>', methods=['DELETE'])
+def remove_database(name):
+    """Remove a configuração de um município do JSON"""
+    try:
+        configs = Config.load_db_configs()
+        if name not in configs:
+            return jsonify({'error': f'Município {name} não encontrado.'}), 404
+
+        if len(configs) <= 1:
+            return jsonify({'error': 'Não é possível remover todos os municípios. Pelo menos um deve estar configurado.'}), 400
+
+        del configs[name]
+        Config.save_db_configs(configs)
+
+        return jsonify({'message': f'Município {name} removido com sucesso!'})
+
+    except Exception as e:
+        print(f"Erro ao remover município: {e}")
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
 
 
 if __name__ == '__main__':

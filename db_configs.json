@@ -1,0 +1,18 @@
+{
+    "Viradouro": {
+        "host": "dpg-d7jn378sfn5c738s2veg-a.virginia-postgres.render.com",
+        "port": "5432",
+        "dbname": "somos_educa_26_vd",
+        "user": "somos_educa_26_rp_user",
+        "password": "mPaPHRDIeuGiHxV3sNKnXH3N1BlmF4Ry",
+        "sslmode": "require"
+    },
+    "Rio Pardo": {
+        "host": "dpg-d7jn378sfn5c738s2veg-a.virginia-postgres.render.com",
+        "port": "5432",
+        "dbname": "somos_educa_26_rp",
+        "user": "somos_educa_26_rp_user",
+        "password": "mPaPHRDIeuGiHxV3sNKnXH3N1BlmF4Ry",
+        "sslmode": "require"
+    }
+}
