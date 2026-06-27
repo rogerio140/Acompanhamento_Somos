@@ -750,21 +750,30 @@ class RelatorioGenerator:
         return buffer
     
     def criar_heatmap_escolas_estagios(self, escolas_dados, titulo):
-        """Cria mapa de calor das escolas e estágios de desenvolvimento"""
+        """Cria mapa de calor das escolas e estágios de desenvolvimento.
+        Exibe a distribuição em % por escola (linha) para permitir comparações
+        justas entre escolas com quantidades diferentes de alunos.
+        """
         if not escolas_dados:
             return None
         
         escolas = list(escolas_dados.keys())
         estagios = list(range(1, 6))
         
-        dados = np.zeros((len(escolas), len(estagios)))
+        # Matriz absoluta
+        dados_abs = np.zeros((len(escolas), len(estagios)))
         for i, escola in enumerate(escolas):
             for j, estagio in enumerate(estagios):
-                dados[i, j] = escolas_dados[escola].get(estagio, 0)
+                dados_abs[i, j] = escolas_dados[escola].get(estagio, 0)
+        
+        # Normalizar por linha (% por escola)
+        totais_linha = dados_abs.sum(axis=1, keepdims=True)
+        totais_linha[totais_linha == 0] = 1  # evitar divisão por zero
+        dados_pct = (dados_abs / totais_linha) * 100
         
         fig, ax = plt.subplots(figsize=(12, max(6, len(escolas) * 0.5)))
         
-        im = ax.imshow(dados, cmap='YlOrRd', aspect='auto')
+        im = ax.imshow(dados_pct, cmap='YlOrRd', aspect='auto', vmin=0, vmax=100)
         
         ax.set_xticks(range(len(estagios)))
         ax.set_xticklabels([f'Estágio {e}' for e in estagios], fontsize=10, fontweight='bold')
@@ -773,18 +782,21 @@ class RelatorioGenerator:
         
         ax.set_xlabel('Estágios de Desenvolvimento', fontsize=11, fontweight='bold')
         ax.set_ylabel('Escolas', fontsize=11, fontweight='bold')
-        ax.set_title(titulo, fontsize=12, fontweight='bold', pad=15)
+        ax.set_title(titulo + ' (% por escola)', fontsize=12, fontweight='bold', pad=15)
         
         cbar = plt.colorbar(im, ax=ax, shrink=0.8)
-        cbar.set_label('Número de Alunos', fontsize=10)
+        cbar.set_label('% de Alunos no Estágio', fontsize=10)
         
+        # Anotações: mostrar APENAS % (sem contagem absoluta)
         for i in range(len(escolas)):
             for j in range(len(estagios)):
-                valor = dados[i, j]
-                if valor > 0:
-                    text_color = 'white' if valor > np.max(dados)/2 else 'black'
-                    ax.text(j, i, str(int(valor)), ha='center', va='center', 
-                           color=text_color, fontsize=8, fontweight='bold')
+                pct = dados_pct[i, j]
+                abs_val = int(dados_abs[i, j])
+                if abs_val > 0:
+                    text_color = 'white' if pct > 55 else 'black'
+                    # ALTERAÇÃO AQUI: Mostrar apenas a porcentagem
+                    ax.text(j, i, f'{pct:.0f}%', ha='center', va='center',
+                            color=text_color, fontsize=8, fontweight='bold')
         
         plt.tight_layout()
         
@@ -793,6 +805,9 @@ class RelatorioGenerator:
         plt.close()
         buffer.seek(0)
         return buffer
+
+
+
     
     def criar_histograma(self, tempos_infantil, tempos_fundamental):
         """Cria histogramas lado a lado da distribuição dos tempos"""
@@ -835,6 +850,8 @@ class RelatorioGenerator:
         plt.close()
         buffer.seek(0)
         return buffer
+    
+
     
     def criar_grafico_horarios_alunos(self, contagem_horas, total_alunos):
         """Cria gráfico de barras dos horários de finalização das avaliações"""
@@ -1451,6 +1468,69 @@ class RelatorioGenerator:
         buffer.seek(0)
         return buffer
 
+    def criar_grafico_curva_aprendizagem_geral(self, dados_infantil_prof, dados_fundamental_prof):
+        """
+        Gera um gráfico comparativo das curvas de aprendizado gerais (mediana)
+        da Educação Infantil e do Ensino Fundamental.
+        """
+        curva_inf = self.calcular_curva_referencia_geral(dados_infantil_prof) if dados_infantil_prof else None
+        curva_fund = self.calcular_curva_referencia_geral(dados_fundamental_prof) if dados_fundamental_prof else None
+
+        fig, ax = plt.subplots(figsize=(10, 5))
+        
+        has_data = False
+        
+        if curva_inf and curva_inf.get('posicoes'):
+            has_data = True
+            pos = curva_inf['posicoes']
+            med = curva_inf['mediana']
+            q25 = curva_inf['q25']
+            q75 = curva_inf['q75']
+            
+            # Limit plot to top 15 evaluations to avoid a long tail with scarce data
+            limit = min(len(pos), 15)
+            pos = pos[:limit]
+            med = med[:limit]
+            q25 = q25[:limit]
+            q75 = q75[:limit]
+            
+            ax.plot(pos, med, color='#4ECDC4', linewidth=2.5, marker='o', label='Educação Infantil (mediana)')
+            ax.fill_between(pos, q25, q75, color='#4ECDC4', alpha=0.1, label='Faixa IQR (Infantil)')
+            
+        if curva_fund and curva_fund.get('posicoes'):
+            has_data = True
+            pos = curva_fund['posicoes']
+            med = curva_fund['mediana']
+            q25 = curva_fund['q25']
+            q75 = curva_fund['q75']
+            
+            # Limit plot to top 15
+            limit = min(len(pos), 15)
+            pos = pos[:limit]
+            med = med[:limit]
+            q25 = q25[:limit]
+            q75 = q75[:limit]
+            
+            ax.plot(pos, med, color='#3F51B5', linewidth=2.5, marker='s', label='Ensino Fundamental (mediana)')
+            ax.fill_between(pos, q25, q75, color='#3F51B5', alpha=0.1, label='Faixa IQR (Fundamental)')
+
+        ax.set_xlabel('Sequência de Avaliações (ordem cronológica)', fontsize=10, fontweight='bold')
+        ax.set_ylabel('Tempo da Avaliação (minutos)', fontsize=10, fontweight='bold')
+        ax.set_title('Curva de Aprendizagem Geral por Segmento', fontsize=12, fontweight='bold', pad=15)
+        ax.set_xlim(left=0.5)
+        ax.set_ylim(bottom=0)
+        ax.grid(alpha=0.3, linestyle='--')
+        ax.set_facecolor('#f8f9fa')
+        ax.legend(loc='upper right', fontsize=9, framealpha=0.92)
+        
+        plt.tight_layout()
+        
+        buffer = BytesIO()
+        plt.savefig(buffer, format='png', dpi=130, bbox_inches='tight', facecolor='white')
+        plt.close()
+        buffer.seek(0)
+        return buffer if has_data else None
+
 
 
 
@@ -1973,6 +2053,22 @@ class RelatorioGenerator:
                 imagem = Image(img_buffer, width=17*cm, height=11*cm)
                 imagem.hAlign = 'CENTER'
                 story.append(imagem)
+                story.append(Spacer(1, 15))
+
+            # Adicionar gráfico de curva de aprendizagem geral por segmento
+            story.append(Paragraph("<b>Curva de Aprendizagem Geral por Segmento</b>", estilo_normal))
+            story.append(Paragraph("<i>Mediana do tempo de avaliação por posição sequencial (evolução do aprendizado do grupo)</i>", 
+                                ParagraphStyle('ItalicNote', parent=estilo_normal, fontSize=9, textColor=colors.HexColor('#7F8C8D'))))
+            story.append(Spacer(1, 5))
+            
+            dados_inf_prof = dados['infantil']['professores'] if (dados.get('infantil') and 'professores' in dados['infantil']) else None
+            dados_fund_prof = dados['fundamental']['professores'] if (dados.get('fundamental') and 'professores' in dados['fundamental']) else None
+            
+            img_curva_buffer = self.criar_grafico_curva_aprendizagem_geral(dados_inf_prof, dados_fund_prof)
+            if img_curva_buffer:
+                imagem_curva = Image(img_curva_buffer, width=17*cm, height=8.5*cm)
+                imagem_curva.hAlign = 'CENTER'
+                story.append(imagem_curva)
                 story.append(Spacer(1, 15))
             
             # Tabela de classificação por eficiência

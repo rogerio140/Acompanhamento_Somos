@@ -417,6 +417,33 @@
                         </div>
                     </div>
 
+                    <!-- Card de Curva de Aprendizagem Geral -->
+                    <div class="chart-card large animate-in" id="card-curva-geral" style="display:none;">
+                        <div class="curva-grafico-header">
+                            <h3 style="margin:0;">
+                                <i class="fa-solid fa-chart-line" style="color: var(--accent-teal);"></i>
+                                Curva de Aprendizagem Geral por Segmento
+                            </h3>
+                            <div class="curva-legenda">
+                                <span class="curva-legenda-item">
+                                    <span class="curva-legenda-dot" style="background: #4ECDC4;"></span>
+                                    Educação Infantil (mediana)
+                                </span>
+                                <span class="curva-legenda-item">
+                                    <span class="curva-legenda-dot" style="background: #3F51B5;"></span>
+                                    Ensino Fundamental (mediana)
+                                </span>
+                            </div>
+                        </div>
+                        <div id="curva-geral-loading" class="curva-loading" style="display:none;">
+                            <div class="curva-spinner"></div>
+                            <span>Carregando curva de aprendizagem geral...</span>
+                        </div>
+                        <div class="chart-wrapper" id="curva-geral-chart-wrapper">
+                            <img id="img-curva-geral" src="" alt="Curva de Aprendizagem Geral" style="display:none; width:100%; border-radius:8px;">
+                        </div>
+                    </div>
+
                     <!-- Gráfico da curva de aprendizagem -->
                     <div class="chart-card large animate-in" id="card-curva-grafico" style="display:none;">
                         <div class="curva-grafico-header">

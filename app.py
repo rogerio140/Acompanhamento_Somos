@@ -315,6 +315,52 @@ def curva_aprendizagem_professor():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/curva-aprendizagem-geral', methods=['POST'])
+def curva_aprendizagem_geral():
+    """Gera o gráfico da curva de aprendizagem geral por segmento (Infantil e Fundamental)"""
+    try:
+        data = request.json
+        municipio = data.get('municipio')
+
+        if not municipio or municipio not in Config.DB_CONFIGS:
+            return jsonify({'error': 'Município inválido'}), 400
+
+        db = Database(municipio=municipio)
+        generator = RelatorioGenerator(db)
+        dados = generator.coletar_dados()
+
+        if not dados:
+            return jsonify({'error': 'Sem dados disponíveis'}), 404
+
+        # Separar professores por segmento para gerar curva por segmento
+        profs_infantil = {}
+        profs_fundamental = {}
+        for prof_id, pinfo in dados.get('professores', {}).get('todos', {}).items():
+            seg = pinfo.get('segmento', 'ambos')
+            if seg == 'infantil':
+                profs_infantil[prof_id] = pinfo
+            elif seg == 'fundamental':
+                profs_fundamental[prof_id] = pinfo
+            else:  # 'ambos' — inclui em ambos
+                profs_infantil[prof_id] = pinfo
+                profs_fundamental[prof_id] = pinfo
+
+        buf = generator.criar_grafico_curva_aprendizagem_geral(
+            profs_infantil if profs_infantil else None,
+            profs_fundamental if profs_fundamental else None
+        )
+
+        import base64
+        grafico_b64 = base64.b64encode(buf.getvalue()).decode('utf-8') if buf else None
+
+        return jsonify({'grafico': grafico_b64})
+
+    except Exception as e:
+        print(f"Erro ao gerar curva geral: {e}")
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/gerar-relatorio', methods=['POST'])
 def gerar_relatorio():
     """Gera o relatório PDF e retorna para download"""

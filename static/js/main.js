@@ -605,20 +605,66 @@ document.addEventListener('DOMContentLoaded', () => {
             if (targetContent) {
                 targetContent.classList.add('active');
             }
+
+            // Carregar curva geral automaticamente ao entrar na aba
+            if (targetTab === 'tab-curva-aprendizagem' && _municipioAtual) {
+                carregarCurvaGeral(_municipioAtual);
+            }
         });
     });
+
+    // ---- Curva de Aprendizagem Geral (automática ao abrir a aba) ----
+    let _curvaGeralCarregada = false;
+
+    async function carregarCurvaGeral(municipio) {
+        // Só carrega uma vez por município
+        if (_curvaGeralCarregada) return;
+
+        const cardGeralEl = document.getElementById('card-curva-geral');
+        const imgGeralEl  = document.getElementById('img-curva-geral');
+        const loadGeralEl = document.getElementById('curva-geral-loading');
+
+        if (!cardGeralEl) return;
+
+        cardGeralEl.style.display = 'block';
+        if (loadGeralEl) loadGeralEl.style.display = 'flex';
+        if (imgGeralEl)  imgGeralEl.style.display = 'none';
+
+        try {
+            const resp = await fetch('/curva-aprendizagem-geral', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ municipio })
+            });
+            if (!resp.ok) {
+                const err = await resp.json();
+                throw new Error(err.error || 'Erro ao carregar curva geral');
+            }
+            const payload = await resp.json();
+            if (payload.grafico && imgGeralEl) {
+                imgGeralEl.src = `data:image/png;base64,${payload.grafico}`;
+                imgGeralEl.style.display = 'block';
+                _curvaGeralCarregada = true;
+            }
+        } catch (err) {
+            console.error('Erro curva geral:', err);
+            if (cardGeralEl) cardGeralEl.style.display = 'none';
+        } finally {
+            if (loadGeralEl) loadGeralEl.style.display = 'none';
+        }
+    }
 
     // ---- Curva de Aprendizagem Individual ----
     const selectProfessor = document.getElementById('select-professor');
     const btnGerarCurva = document.getElementById('btn-gerar-curva');
 
-    // Variável para guardar o municipio atual e dados de professores
+    // Variáveis para guardar o municipio atual e dados de professores
     let _municipioAtual = null;
     let _professoresDataAtual = null;
 
-    // Habilitar botão quando professor selecionado
+    // Ao selecionar professor: gerar curva automaticamente
     if (selectProfessor) {
-        selectProfessor.addEventListener('change', () => {
+        selectProfessor.addEventListener('change', async () => {
             const val = selectProfessor.value;
             if (btnGerarCurva) {
                 btnGerarCurva.disabled = !val;
@@ -629,9 +675,15 @@ document.addEventListener('DOMContentLoaded', () => {
             if (cardGrafico) cardGrafico.style.display = 'none';
             if (cardRef) cardRef.style.display = 'none';
             document.getElementById('curva-kpis').style.display = 'none';
+
+            // Gerar automaticamente ao selecionar
+            if (val && _municipioAtual) {
+                await gerarCurvaIndividual(val);
+            }
         });
     }
 
+    // Botão manual (manter como fallback / re-gerar)
     if (btnGerarCurva) {
         btnGerarCurva.addEventListener('click', async () => {
             const profId = selectProfessor ? selectProfessor.value : '';
@@ -639,126 +691,136 @@ document.addEventListener('DOMContentLoaded', () => {
                 showToast('Selecione um município e um professor', 'error');
                 return;
             }
-
-            // UI de carregamento
-            btnGerarCurva.disabled = true;
-            btnGerarCurva.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Gerando...';
-            const curvaLoading = document.getElementById('curva-loading');
-            const cardGrafico = document.getElementById('card-curva-grafico');
-            const cardRef = document.getElementById('card-curva-referencia');
-            const imgCurva = document.getElementById('img-curva-aprendizagem');
-
-            cardGrafico.style.display = 'block';
-            if (curvaLoading) curvaLoading.style.display = 'flex';
-            if (imgCurva) imgCurva.style.display = 'none';
-
-            try {
-                const response = await fetch('/curva-aprendizagem-professor', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ municipio: _municipioAtual, prof_id: profId })
-                });
-
-                if (!response.ok) {
-                    const err = await response.json();
-                    throw new Error(err.error || 'Erro desconhecido');
-                }
-
-                const payload = await response.json();
-
-                // Exibir gráfico
-                if (payload.grafico && imgCurva) {
-                    imgCurva.src = `data:image/png;base64,${payload.grafico}`;
-                    imgCurva.style.display = 'block';
-                }
-                if (curvaLoading) curvaLoading.style.display = 'none';
-
-                // Atualizar KPIs
-                const stats = payload.stats || {};
-                const profInfo = _professoresDataAtual ? _professoresDataAtual[profId] : null;
-                document.getElementById('curva-kpis').style.display = 'flex';
-                document.getElementById('ckpi-media').textContent    = stats.media    != null ? `${stats.media.toFixed(1)} min`    : '-';
-                document.getElementById('ckpi-mediana').textContent  = stats.mediana  != null ? `${stats.mediana.toFixed(1)} min`  : '-';
-                document.getElementById('ckpi-min').textContent      = stats.min      != null ? `${stats.min.toFixed(1)} min`      : '-';
-                document.getElementById('ckpi-max').textContent      = stats.max      != null ? `${stats.max.toFixed(1)} min`      : '-';
-                document.getElementById('ckpi-std').textContent      = stats.std      != null ? `±${stats.std.toFixed(1)} min`     : '-';
-                document.getElementById('ckpi-total').textContent    = profInfo       ? profInfo.total_alunos                      : '-';
-
-                // Insight automático
-                const insightEl = document.getElementById('curva-insight');
-                const insightTexto = document.getElementById('curva-insight-texto');
-                if (insightEl && insightTexto && stats.media != null && stats.std != null) {
-                    const cv = stats.std / stats.media; // Coeficiente de variação
-                    let insightMsg = '';
-                    if (cv < 0.2) {
-                        insightMsg = `✅ Alta consistência: o tempo de avaliação é muito estável (CV = ${(cv*100).toFixed(0)}%). O professor avalia com ritmo regular.`;
-                    } else if (cv < 0.4) {
-                        insightMsg = `⚡ Variabilidade moderada (CV = ${(cv*100).toFixed(0)}%). Existem algumas variações no tempo de avaliação, o que pode indicar avaliações mais complexas em momentos específicos.`;
-                    } else {
-                        insightMsg = `⚠️ Alta variabilidade (CV = ${(cv*100).toFixed(0)}%). O tempo de avaliação varia muito — vale investigar se há alunos que demandam mais tempo ou interruções no processo.`;
-                    }
-                    insightTexto.textContent = insightMsg;
-                    insightEl.style.display = 'flex';
-                }
-
-                // Popular tabela de referência comparativa
-                const curvaRef = payload.curva_referencia;
-                const tbodyCurvaRef = document.getElementById('tbody-curva-ref');
-                if (curvaRef && tbodyCurvaRef) {
-                    tbodyCurvaRef.innerHTML = '';
-                    const profDetalhes = profInfo ? (profInfo.alunos_detalhes || []) : [];
-                    const profDetalhesSorted = [...profDetalhes].filter(d => d.inicio && d.tempo_minutos > 0)
-                        .sort((a, b) => a.inicio.localeCompare(b.inicio));
-
-                    curvaRef.posicoes.forEach((pos, i) => {
-                        const medRef = curvaRef.mediana[i];
-                        const q25 = curvaRef.q25[i];
-                        const q75 = curvaRef.q75[i];
-
-                        // Tempo real do professor nessa posição
-                        const tempoProf = profDetalhesSorted[pos - 1] ? profDetalhesSorted[pos - 1].tempo_minutos : null;
-
-                        let comparacaoHtml = '<span style="color: var(--text-muted);">—</span>';
-                        if (tempoProf != null) {
-                            if (tempoProf < q25) {
-                                comparacaoHtml = `<span style="color:#27AE60; font-weight:600;">▼ ${tempoProf.toFixed(1)} min <small>(abaixo Q25)</small></span>`;
-                            } else if (tempoProf > q75) {
-                                comparacaoHtml = `<span style="color:#E74C3C; font-weight:600;">▲ ${tempoProf.toFixed(1)} min <small>(acima Q75)</small></span>`;
-                            } else {
-                                comparacaoHtml = `<span style="color:#F39C12; font-weight:600;">◆ ${tempoProf.toFixed(1)} min <small>(dentro da faixa)</small></span>`;
-                            }
-                        }
-
-                        const tr = document.createElement('tr');
-                        tr.innerHTML = `
-                            <td style="text-align:center; font-weight:600;">${pos}ª</td>
-                            <td style="text-align:center;">${medRef.toFixed(1)}</td>
-                            <td style="text-align:center; color: var(--accent-teal);">${q25.toFixed(1)}</td>
-                            <td style="text-align:center; color: var(--accent-coral);">${q75.toFixed(1)}</td>
-                            <td style="text-align:center;">${comparacaoHtml}</td>
-                        `;
-                        tbodyCurvaRef.appendChild(tr);
-                    });
-                    cardRef.style.display = 'block';
-                }
-
-                showToast('Curva de aprendizagem gerada! 📈', 'success');
-
-            } catch (err) {
-                if (curvaLoading) curvaLoading.style.display = 'none';
-                cardGrafico.style.display = 'none';
-                showToast(err.message || 'Erro ao gerar curva', 'error');
-                console.error('Erro curva de aprendizagem:', err);
-            } finally {
-                btnGerarCurva.disabled = false;
-                btnGerarCurva.innerHTML = '<i class="fa-solid fa-chart-line"></i> Gerar Curva';
-            }
+            await gerarCurvaIndividual(profId);
         });
     }
 
-    // ---- Função auxiliar para popular select de professores ----
+    // ---- Função central para gerar a curva individual ----
+    async function gerarCurvaIndividual(profId) {
+        if (!profId || !_municipioAtual) return;
+
+        // UI de carregamento
+        if (btnGerarCurva) {
+            btnGerarCurva.disabled = true;
+            btnGerarCurva.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Gerando...';
+        }
+        const curvaLoading = document.getElementById('curva-loading');
+        const cardGrafico = document.getElementById('card-curva-grafico');
+        const cardRef = document.getElementById('card-curva-referencia');
+        const imgCurva = document.getElementById('img-curva-aprendizagem');
+
+        cardGrafico.style.display = 'block';
+        if (curvaLoading) curvaLoading.style.display = 'flex';
+        if (imgCurva) imgCurva.style.display = 'none';
+
+        try {
+            const response = await fetch('/curva-aprendizagem-professor', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ municipio: _municipioAtual, prof_id: profId })
+            });
+
+            if (!response.ok) {
+                const err = await response.json();
+                throw new Error(err.error || 'Erro desconhecido');
+            }
+
+            const payload = await response.json();
+
+            // Exibir gráfico
+            if (payload.grafico && imgCurva) {
+                imgCurva.src = `data:image/png;base64,${payload.grafico}`;
+                imgCurva.style.display = 'block';
+            }
+            if (curvaLoading) curvaLoading.style.display = 'none';
+
+            // Atualizar KPIs
+            const stats = payload.stats || {};
+            const profInfo = _professoresDataAtual ? _professoresDataAtual[profId] : null;
+            document.getElementById('curva-kpis').style.display = 'flex';
+            document.getElementById('ckpi-media').textContent    = stats.media    != null ? `${stats.media.toFixed(1)} min`    : '-';
+            document.getElementById('ckpi-mediana').textContent  = stats.mediana  != null ? `${stats.mediana.toFixed(1)} min`  : '-';
+            document.getElementById('ckpi-min').textContent      = stats.min      != null ? `${stats.min.toFixed(1)} min`      : '-';
+            document.getElementById('ckpi-max').textContent      = stats.max      != null ? `${stats.max.toFixed(1)} min`      : '-';
+            document.getElementById('ckpi-std').textContent      = stats.std      != null ? `±${stats.std.toFixed(1)} min`     : '-';
+            document.getElementById('ckpi-total').textContent    = profInfo       ? profInfo.total_alunos                      : '-';
+
+            // Insight automático
+            const insightEl = document.getElementById('curva-insight');
+            const insightTexto = document.getElementById('curva-insight-texto');
+            if (insightEl && insightTexto && stats.media != null && stats.std != null) {
+                const cv = stats.std / stats.media;
+                let insightMsg = '';
+                if (cv < 0.2) {
+                    insightMsg = `✅ Alta consistência: o tempo de avaliação é muito estável (CV = ${(cv*100).toFixed(0)}%). O professor avalia com ritmo regular.`;
+                } else if (cv < 0.4) {
+                    insightMsg = `⚡ Variabilidade moderada (CV = ${(cv*100).toFixed(0)}%). Existem algumas variações no tempo de avaliação, o que pode indicar avaliações mais complexas em momentos específicos.`;
+                } else {
+                    insightMsg = `⚠️ Alta variabilidade (CV = ${(cv*100).toFixed(0)}%). O tempo de avaliação varia muito — vale investigar se há alunos que demandam mais tempo ou interrupções no processo.`;
+                }
+                insightTexto.textContent = insightMsg;
+                insightEl.style.display = 'flex';
+            }
+
+            // Popular tabela de referência comparativa
+            const curvaRef = payload.curva_referencia;
+            const tbodyCurvaRef = document.getElementById('tbody-curva-ref');
+            if (curvaRef && tbodyCurvaRef) {
+                tbodyCurvaRef.innerHTML = '';
+                const profDetalhes = profInfo ? (profInfo.alunos_detalhes || []) : [];
+                const profDetalhesSorted = [...profDetalhes].filter(d => d.inicio && d.tempo_minutos > 0)
+                    .sort((a, b) => a.inicio.localeCompare(b.inicio));
+
+                curvaRef.posicoes.forEach((pos, i) => {
+                    const medRef = curvaRef.mediana[i];
+                    const q25 = curvaRef.q25[i];
+                    const q75 = curvaRef.q75[i];
+
+                    const tempoProf = profDetalhesSorted[pos - 1] ? profDetalhesSorted[pos - 1].tempo_minutos : null;
+
+                    let comparacaoHtml = '<span style="color: var(--text-muted);">—</span>';
+                    if (tempoProf != null) {
+                        if (tempoProf < q25) {
+                            comparacaoHtml = `<span style="color:#27AE60; font-weight:600;">▼ ${tempoProf.toFixed(1)} min <small>(abaixo Q25)</small></span>`;
+                        } else if (tempoProf > q75) {
+                            comparacaoHtml = `<span style="color:#E74C3C; font-weight:600;">▲ ${tempoProf.toFixed(1)} min <small>(acima Q75)</small></span>`;
+                        } else {
+                            comparacaoHtml = `<span style="color:#F39C12; font-weight:600;">◆ ${tempoProf.toFixed(1)} min <small>(dentro da faixa)</small></span>`;
+                        }
+                    }
+
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td style="text-align:center; font-weight:600;">${pos}ª</td>
+                        <td style="text-align:center;">${medRef.toFixed(1)}</td>
+                        <td style="text-align:center; color: var(--accent-teal);">${q25.toFixed(1)}</td>
+                        <td style="text-align:center; color: var(--accent-coral);">${q75.toFixed(1)}</td>
+                        <td style="text-align:center;">${comparacaoHtml}</td>
+                    `;
+                    tbodyCurvaRef.appendChild(tr);
+                });
+                cardRef.style.display = 'block';
+            }
+
+            showToast('Curva de aprendizagem gerada! 📈', 'success');
+
+        } catch (err) {
+            if (curvaLoading) curvaLoading.style.display = 'none';
+            cardGrafico.style.display = 'none';
+            showToast(err.message || 'Erro ao gerar curva', 'error');
+            console.error('Erro curva de aprendizagem:', err);
+        } finally {
+            if (btnGerarCurva) {
+                btnGerarCurva.disabled = !selectProfessor?.value;
+                btnGerarCurva.innerHTML = '<i class="fa-solid fa-chart-line"></i> Gerar Curva';
+            }
+        }
+    }
+
+    // Expor função globalmente para ser chamada no carregarDashboard
     function popularSelectProfessores(professoresData, municipio) {
         _municipioAtual = municipio;
+        _curvaGeralCarregada = false; // resetar ao mudar município
         _professoresDataAtual = professoresData;
 
         if (!selectProfessor) return;
@@ -784,9 +846,14 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         if (btnGerarCurva) btnGerarCurva.disabled = true;
+
+        // Se a aba já estiver ativa, carregar curva geral imediatamente
+        const tabCurvaBtn = document.querySelector('[data-tab="tab-curva-aprendizagem"]');
+        if (tabCurvaBtn && tabCurvaBtn.classList.contains('active')) {
+            carregarCurvaGeral(municipio);
+        }
     }
 
-    // Expor função globalmente para ser chamada no carregarDashboard
     window._popularSelectProfessores = popularSelectProfessores;
 
     // ============================================================
