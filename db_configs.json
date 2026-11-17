@@ -7,12 +7,20 @@
         "password": "mPaPHRDIeuGiHxV3sNKnXH3N1BlmF4Ry",
         "sslmode": "require"
     },
-    "Rio Pardo": {
-        "host": "dpg-d7jn378sfn5c738s2veg-a.virginia-postgres.render.com",
+    "Rio Pardo 2º semestre": {
+        "host": "dpg-da2dthrm8hqs73emp9og-a.virginia-postgres.render.com",
         "port": "5432",
-        "dbname": "somos_educa_26_rp",
-        "user": "somos_educa_26_rp_user",
-        "password": "mPaPHRDIeuGiHxV3sNKnXH3N1BlmF4Ry",
+        "dbname": "rio_pardo_2026_2",
+        "user": "englife",
+        "password": "WSXCkriE7Mpr5EEafkR5PWtgVk4pxp9M",
+        "sslmode": "require"
+    },
+    "Rio Pardo 1º semestre": {
+        "host": "dpg-da2dthrm8hqs73emp9og-a.virginia-postgres.render.com",
+        "port": "5432",
+        "dbname": "rio_pardo_2026_1",
+        "user": "englife",
+        "password": "WSXCkriE7Mpr5EEafkR5PWtgVk4pxp9M",
         "sslmode": "require"
     }
 }
